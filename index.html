@@ -1,0 +1,2090 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#040810">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>スケジュール&タスク統合ボード（タブレット版）</title>
+<style>
+  :root{
+    --navy-950:#040810;
+    --navy-900:#060f1f;
+    --cyan:#2fe4ff;
+    --cyan-soft:#34d399; /* 文字のアクセント色: エメラルド（もとは水色 #8ef3ff） */
+    --cyan-dim:#0f7d95;
+    --violet:#8a7dff;
+    --amber:#ffb454;
+    --mint:#3dffc0;
+    --danger:#ff4d6d;
+    --text:#e4f6ff;
+    --text-dim:#89aec4;
+    --accent-rgb:47,228,255;
+    --panel-rgb:11,26,48;
+    --bg-mid-rgb:8,16,30;
+    --border:rgba(90,225,255,0.28);
+    --panel:rgba(var(--panel-rgb),0.62);
+    --panel-solid:rgba(var(--panel-rgb),0.96);
+    --tabbar-h:64px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;color:var(--text);
+    font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic UI',sans-serif;
+    background:radial-gradient(ellipse at 80% 110%, #0d2a4a 0%, transparent 55%),
+               radial-gradient(ellipse at 0% 0%, #0a1d38 0%, transparent 50%), var(--navy-950);}
+  button{font-family:inherit;color:inherit;}
+  ::-webkit-scrollbar{width:6px;height:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--cyan-dim);border-radius:6px;}
+
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);}
+
+  /* ---------- HEADER ---------- */
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;
+    background:linear-gradient(180deg, rgba(4,9,18,0.96), rgba(4,9,18,0.8));
+    border-bottom:1px solid var(--border);flex-shrink:0;}
+  .brand-mark{width:30px;height:30px;border:1px solid var(--cyan);border-radius:8px;display:flex;align-items:center;justify-content:center;
+    color:var(--cyan);font-size:17px;box-shadow:0 0 14px rgba(var(--accent-rgb),0.5);flex-shrink:0;}
+  .brand h1{margin:0;font-size:17px;font-weight:600;letter-spacing:0.04em;}
+  .brand p{margin:0;font-size:12px;color:var(--text-dim);}
+  .brand{min-width:0;}
+  .spacer{flex:1;}
+  .today-badge{font-size:14px;color:var(--cyan-soft);border:1px solid var(--border);padding:6px 12px;border-radius:8px;background:rgba(var(--accent-rgb),0.06);white-space:nowrap;}
+  .hbtn{min-width:44px;height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--border);background:rgba(var(--accent-rgb),0.08);
+    font-size:15px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;white-space:nowrap;}
+  .hbtn:active{background:rgba(var(--accent-rgb),0.25);}
+  .hbtn.primary{border-color:var(--cyan);color:var(--cyan-soft);box-shadow:0 0 10px rgba(var(--accent-rgb),0.25);}
+  .hbtn.on{background:rgba(var(--accent-rgb),0.28);color:var(--cyan-soft);}
+
+  /* ---------- VIEWS ---------- */
+  main{flex:1;min-height:0;position:relative;}
+  .view{position:absolute;inset:0;display:none;padding:12px 14px;}
+  .view.active{display:flex;}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    display:flex;flex-direction:column;min-height:0;min-width:0;}
+  .panel-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .panel-head h2{margin:0;font-size:17px;font-weight:600;}
+  #calTitle{color:var(--cyan-soft);} /* PC版のパネルタイトル（スケジュール／タスクボード）と同じ色 */
+
+  /* ---------- 流れる文字（PC版のヘッダー通知・NEXT・AI秘書チェック） ---------- */
+  .header-alert{flex:1;position:relative;height:28px;overflow:hidden;min-width:40px;}
+  .header-alert-track{position:absolute;top:0;left:0;white-space:nowrap;font-size:19px;font-weight:800;line-height:28px;color:#4cd964;text-shadow:0 0 10px rgba(76,217,100,0.6);}
+  .header-alert-track.scrolling{animation-name:headerAlertScroll, headerAlertGlowGreen;animation-timing-function:linear, ease-in-out;animation-iteration-count:infinite, infinite;}
+  .header-alert-track.arrived{position:static;display:block;width:100%;text-align:center;overflow:hidden;text-overflow:ellipsis;color:#ff4d6d;
+    animation:headerAlertGlowRed 1s ease-in-out infinite;}
+  /* 赤の「開始時刻です」は中央表示。入りきらない長さのときだけ流す */
+  .header-alert-track.arrived.scrolling{position:absolute;display:inline-block;width:auto;text-align:left;overflow:visible;
+    animation-name:headerAlertScroll, headerAlertGlowRed;animation-timing-function:linear, ease-in-out;animation-iteration-count:infinite, infinite;}
+  .next-row{display:flex;padding:8px 8px 0;flex-shrink:0;}
+  .next-row .panel-marquee{margin:0;height:26px;}
+  .next-row .panel-marquee-track{font-size:17px;line-height:26px;}
+  @keyframes headerAlertScroll{ from{transform:translateX(var(--startX,100%));} to{transform:translateX(var(--endX,-100%));} }
+  @keyframes headerAlertGlowGreen{ 0%,100%{ text-shadow:0 0 4px rgba(76,217,100,0.45); opacity:0.8; } 50%{ text-shadow:0 0 18px rgba(76,217,100,1); opacity:1; } }
+  @keyframes headerAlertGlowRed{ 0%,100%{ text-shadow:0 0 4px rgba(255,77,109,0.45); opacity:0.8; } 50%{ text-shadow:0 0 18px rgba(255,77,109,1); opacity:1; } }
+
+  .panel-marquee{flex:1;position:relative;height:24px;overflow:hidden;min-width:40px;margin:0 6px;}
+  .panel-marquee-track{position:absolute;top:0;left:0;white-space:nowrap;font-size:15px;font-weight:700;line-height:24px;}
+  .panel-marquee-track.scrolling{animation-timing-function:linear, ease-in-out;animation-iteration-count:infinite, infinite;}
+  .panel-marquee-track.yellow{color:#ffd84d;text-shadow:0 0 6px rgba(255,216,77,0.5);}
+  .panel-marquee-track.yellow.scrolling{animation-name:headerAlertScroll, panelGlowYellow;}
+  .panel-marquee-track.green{color:#4cd964;text-shadow:0 0 6px rgba(76,217,100,0.5);}
+  .panel-marquee-track.green.scrolling{animation-name:headerAlertScroll, panelGlowGreen;}
+  .panel-marquee-track.red{color:#ff4d6d;text-shadow:0 0 6px rgba(255,77,109,0.5);}
+  .panel-marquee-track.red.scrolling{animation-name:headerAlertScroll, panelGlowRed;}
+  .panel-marquee-track.pink{color:#ff4da6;text-shadow:0 0 6px rgba(255,77,166,0.5);}
+  .panel-marquee-track.pink.scrolling{animation-name:headerAlertScroll, panelGlowPink;}
+  .panel-marquee-track.orange{color:#ff9f43;text-shadow:0 0 6px rgba(255,159,67,0.5);}
+  .panel-marquee-track.orange.scrolling{animation-name:headerAlertScroll, panelGlowOrange;}
+  @keyframes panelGlowYellow{ 0%,100%{ text-shadow:0 0 4px rgba(255,216,77,0.4); opacity:0.75; } 50%{ text-shadow:0 0 16px rgba(255,216,77,1); opacity:1; } }
+  @keyframes panelGlowGreen{ 0%,100%{ text-shadow:0 0 4px rgba(76,217,100,0.4); opacity:0.75; } 50%{ text-shadow:0 0 16px rgba(76,217,100,1); opacity:1; } }
+  @keyframes panelGlowRed{ 0%,100%{ text-shadow:0 0 4px rgba(255,77,109,0.4); opacity:0.75; } 50%{ text-shadow:0 0 16px rgba(255,77,109,1); opacity:1; } }
+  @keyframes panelGlowPink{ 0%,100%{ text-shadow:0 0 4px rgba(255,77,166,0.4); opacity:0.75; } 50%{ text-shadow:0 0 16px rgba(255,77,166,1); opacity:1; } }
+  @keyframes panelGlowOrange{ 0%,100%{ text-shadow:0 0 4px rgba(255,159,67,0.4); opacity:0.75; } 50%{ text-shadow:0 0 16px rgba(255,159,67,1); opacity:1; } }
+  .panel-head .sub{font-size:13px;color:var(--text-dim);}
+
+  /* ---------- CALENDAR ---------- */
+  #viewCal{gap:12px;}
+  #calPanel{flex:2.3;}
+  #dayPanel{flex:1;min-width:260px;}
+  .cal-body{flex:1;min-height:0;display:flex;flex-direction:column;padding:8px;touch-action:pan-y;}
+  .cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;}
+  .cal-dow{text-align:center;font-size:13px;color:var(--text-dim);padding:2px 0;}
+  .cal-dow.sun{color:#ff8fa3;} .cal-dow.sat{color:#7cc4ff;}
+  .cal-grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .cal-cell{min-height:0;min-width:0;background:linear-gradient(155deg, rgba(30,55,90,0.5) 0%, rgba(var(--bg-mid-rgb),0.35) 100%);
+    border:1px solid var(--border);border-radius:7px;padding:3px;display:flex;flex-direction:column;gap:2px;overflow:hidden;cursor:pointer;}
+  /* PC版と同じ: 土曜=青、日曜と[休]のある日=赤（祝日は日付の数字だけ赤） */
+  .cal-cell.sat,.wk-cell.sat{background:linear-gradient(155deg, rgba(60,140,255,0.26) 0%, rgba(var(--bg-mid-rgb),0.4) 100%);}
+  .cal-cell.sun,.cal-cell.kyu,.wk-cell.sun,.wk-cell.kyu{background:linear-gradient(155deg, rgba(255,90,120,0.24) 0%, rgba(var(--bg-mid-rgb),0.4) 100%);}
+  .cal-cell.other-month{opacity:0.32;}
+  .cal-cell.today{border-color:var(--cyan);box-shadow:0 0 10px rgba(var(--accent-rgb),0.45), inset 0 0 8px rgba(var(--accent-rgb),0.15);}
+  .cal-cell.selected{border-color:var(--amber);box-shadow:0 0 0 2px rgba(255,180,84,0.6);}
+  .cal-date{font-size:13px;font-weight:600;line-height:1.2;}
+  .cal-cell.today .cal-date{color:var(--cyan-soft);}
+  .cal-cell.sun .cal-date,.cal-cell.kyu .cal-date,.cal-cell.jph .cal-date{color:#ff8fa3;}
+  .cal-cell.sat .cal-date{color:#7cc4ff;}
+  .cal-mode{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;flex-shrink:0;}
+  .cal-mode button{border:none;background:transparent;font-size:13px;padding:0 10px;height:36px;cursor:pointer;color:var(--text-dim);}
+  .cal-mode button.on{background:rgba(var(--accent-rgb),0.22);color:var(--cyan-soft);font-weight:600;}
+  .cal-chip{font-size:11.5px;line-height:1.35;padding:0 4px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    background:rgba(var(--accent-rgb),0.14);border-left:2px solid var(--cyan);}
+  .cal-chip.allday{background:rgba(138,125,255,0.22);border-left-color:var(--violet);}
+  .cal-chip.cont{opacity:0.7;}
+  .cal-more{font-size:11px;color:var(--text-dim);padding-left:3px;}
+  .sched-red{border-left-color:#ff4d6d !important;background:rgba(255,77,109,0.2) !important;}
+  .sched-cyan{border-left-color:#2fe4ff !important;background:rgba(47,228,255,0.2) !important;}
+  .sched-yellow{border-left-color:#ffd84d !important;background:rgba(255,216,77,0.18) !important;}
+  .sched-darkgray{border-left-color:#7a8a99 !important;background:rgba(122,138,153,0.2) !important;}
+  .sched-green{border-left-color:#4cd964 !important;background:rgba(76,217,100,0.18) !important;}
+  .sched-purple{border-left-color:#b07dff !important;background:rgba(176,125,255,0.2) !important;}
+  .sched-orange{border-left-color:#ff9f43 !important;background:rgba(255,159,67,0.2) !important;}
+
+  /* 右側: 週間カレンダ → 今日の予定(時間軸) → この日が期限のタスク を1列でスクロール */
+  .day-scroll{flex:1;min-height:0;overflow-y:auto;padding:8px 10px 14px;}
+  .sec-h{display:flex;align-items:baseline;gap:8px;margin:6px 2px 6px;}
+  .sec-h h2,.sec-h .ttl{margin:0;font-size:14.5px;font-weight:600;}
+  .sec-h .sub{font-size:12px;color:var(--text-dim);}
+  .week-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+  .wk-cell{background:linear-gradient(155deg, rgba(30,55,90,0.5) 0%, rgba(var(--bg-mid-rgb),0.35) 100%);border:1px solid var(--border);border-radius:8px;
+    padding:4px 6px;min-height:58px;min-width:0;cursor:pointer;overflow:hidden;}
+  .wk-cell.today{border-color:var(--cyan);box-shadow:0 0 8px rgba(var(--accent-rgb),0.4);}
+  .wk-cell.selected{border-color:var(--amber);}
+  .wk-head{display:flex;align-items:baseline;gap:5px;font-size:12px;font-weight:600;margin-bottom:2px;}
+  .wk-head .d{font-size:14px;}
+  .wk-cell.today .wk-head{color:var(--cyan-soft);}
+  .wk-cell.sun .wk-head,.wk-cell.kyu .wk-head,.wk-cell.jph .wk-head{color:#ff8fa3;}
+  .wk-cell.sat .wk-head{color:#7cc4ff;}
+  .wk-ev{font-size:11px;line-height:1.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:4px;align-items:center;}
+  .wk-ev .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:var(--cyan);}
+  .wk-ev .tm{color:var(--text-dim);flex-shrink:0;}
+  .wk-more{font-size:10.5px;color:var(--text-dim);}
+  .wk-mini{cursor:default;}
+  .mini-title{font-size:11px;font-weight:600;text-align:center;margin-bottom:2px;}
+  .mini-grid{display:grid;grid-template-columns:repeat(7,1fr);font-size:9.5px;text-align:center;line-height:1.5;color:var(--text-dim);}
+  .mini-grid .s{color:#ff8fa3;} .mini-grid .t{color:#7cc4ff;}
+  .mini-grid .o{opacity:0;}
+  .mini-grid .now{background:var(--cyan-soft);color:#04121a;border-radius:50%;font-weight:700;}
+
+  .day-list{position:relative;}
+  .tl-allday{display:flex;flex-direction:column;gap:4px;margin-bottom:6px;}
+  .tl-allday .day-event{padding:4px 8px;gap:8px;font-size:12px;border-left-width:3px;border-radius:6px;}
+  .tl-box{max-height:max(220px, 40vh);overflow-y:auto;padding:10px 6px 8px 0;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,0.12);}
+  .tl{position:relative;margin-left:40px;}
+  .tl-hour{position:absolute;left:-40px;right:0;border-top:1px solid rgba(255,255,255,0.08);font-size:10.5px;color:var(--text-dim);}
+  .tl-hour span{position:absolute;left:0;top:-7px;width:36px;text-align:right;padding-right:4px;font-variant-numeric:tabular-nums;}
+  .tl .day-event.tl-ev{position:absolute;padding:2px 6px;gap:6px;border-radius:6px;border-left-width:3px;overflow:hidden;font-size:12px;
+    display:flex;flex-direction:column;align-items:stretch;}
+  .tl-ev .day-time{font-size:10.5px;min-width:0;line-height:1.3;}
+  .tl-ev .day-title{font-size:12px;line-height:1.3;}
+  .tl .day-event.tl-ev.short{flex-direction:row;align-items:center;gap:5px;padding:0 6px;white-space:nowrap;}
+  .tl-ev.short .day-time{flex-shrink:0;}
+  .tl-ev.short .day-title{overflow:hidden;text-overflow:ellipsis;}
+  .tl-now{position:absolute;left:-6px;right:0;height:0;border-top:2px solid #ff4d6d;z-index:3;pointer-events:none;}
+  .tl-now::before{content:"";position:absolute;left:-4px;top:-5px;width:8px;height:8px;border-radius:50%;background:#ff4d6d;}
+  .due-tasks{display:flex;flex-direction:column;gap:6px;}
+  .due-tasks .kcard{padding:7px 9px;}
+  .due-tasks .kcard-title{font-size:13px;margin-bottom:4px;}
+  .day-event{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:9px;border:1px solid var(--border);
+    border-left:4px solid var(--cyan);background:rgba(var(--accent-rgb),0.08);}
+  .day-event.allday{border-left-color:var(--violet);background:rgba(138,125,255,0.12);}
+  /* 今日の予定の状態（PC版と同じ判定）: 次=黄 / 開始20分前=緑 / 時間中=赤 で点滅発光。
+     色分けクラス(sched-*)は背景が !important なので、背景の色付けは inset の影で重ねる */
+  .day-event.event-next{animation:eventGlowYellow 2.4s ease-in-out infinite;}
+  .day-event.event-upcoming{animation:eventGlowGreen 2.4s ease-in-out infinite;}
+  .day-event.event-ongoing{animation:eventGlowRed 2.4s ease-in-out infinite;}
+  .day-event.event-done{opacity:0.45;}
+  @keyframes eventGlowYellow{
+    0%,100%{ box-shadow:0 0 2px rgba(255,216,77,0.25), inset 0 0 0 999px rgba(255,216,77,0.04); border-color:rgba(255,216,77,0.45); }
+    50%{ box-shadow:0 0 16px rgba(255,216,77,0.95), inset 0 0 0 999px rgba(255,216,77,0.2); border-color:rgba(255,216,77,1); }
+  }
+  @keyframes eventGlowGreen{
+    0%,100%{ box-shadow:0 0 2px rgba(76,217,100,0.25), inset 0 0 0 999px rgba(76,217,100,0.04); border-color:rgba(76,217,100,0.45); }
+    50%{ box-shadow:0 0 16px rgba(76,217,100,0.95), inset 0 0 0 999px rgba(76,217,100,0.2); border-color:rgba(76,217,100,1); }
+  }
+  @keyframes eventGlowRed{
+    0%,100%{ box-shadow:0 0 2px rgba(255,77,109,0.25), inset 0 0 0 999px rgba(255,77,109,0.04); border-color:rgba(255,77,109,0.45); }
+    50%{ box-shadow:0 0 16px rgba(255,77,109,0.95), inset 0 0 0 999px rgba(255,77,109,0.2); border-color:rgba(255,77,109,1); }
+  }
+  .day-time{font-size:14px;color:var(--cyan-soft);font-variant-numeric:tabular-nums;min-width:96px;flex-shrink:0;}
+  .day-title{font-size:15.5px;line-height:1.45;word-break:break-word;}
+  .empty{color:var(--text-dim);font-size:14px;text-align:center;padding:24px 8px;}
+
+  /* ---------- KANBAN ---------- */
+  #viewTask{flex-direction:column;gap:10px;}
+  .task-top{display:flex;align-items:center;gap:8px;flex-shrink:0;min-width:0;}
+  .stat-row{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;}
+
+  /* ---------- AI秘書 ---------- */
+  #viewAi{flex-direction:column;}
+  #aiPanel{flex:1;}
+  .ai-body{flex:1;min-height:0;overflow-y:auto;padding:14px 18px 24px;}
+  .ai-lead{font-size:17px;font-weight:600;color:var(--cyan-soft);margin:0 0 6px;}
+  .ai-sec{font-size:15.5px;font-weight:600;color:var(--amber);margin:18px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border);}
+  .ai-p{font-size:15px;line-height:1.75;margin:0 0 8px;word-break:break-word;}
+
+  /* ---------- コンパクトモード（今日の予定だけ。小さいウィンドウで自動、またはボタンで切替） ---------- */
+  html.compact header .brand,html.compact header .brand-mark,html.compact .theme-switch,
+  html.compact #loadBtn,html.compact nav.tabbar,html.compact #calPanel{display:none;}
+  html.compact header{padding:6px 10px;gap:8px;}
+  html.compact .today-badge{display:block;}
+  html.compact .view{display:none;padding:8px;}
+  html.compact #viewCal{display:flex;}
+  html.compact #dayPanel{flex:1;min-width:0;}
+  html.compact .toast{bottom:20px;}
+  #compactBtn.on{background:rgba(var(--accent-rgb),0.28);color:var(--cyan-soft);}
+  .stat{font-size:14px;padding:6px 12px;border-radius:20px;border:1px solid var(--border);background:var(--panel);}
+  .stat.warn{color:#ffc2cd;border-color:rgba(255,77,109,0.5);}
+  /* タスク(左3/4)とロードマップ(右1/4)を横に並べる */
+  .task-main{flex:1;min-height:0;display:flex;gap:10px;}
+  .kanban{flex:3 1 0;min-width:0;min-height:0;display:flex;gap:8px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+  /* 4.5列ぶんが見える幅（半分見える列で、横スクロールできることが分かる） */
+  .kcol{flex:0 0 calc((100% - 32px) / 4.5);min-width:130px;scroll-snap-align:start;}
+  .kcol .panel-head{justify-content:space-between;padding:7px 9px;gap:6px;}
+  .kcol .panel-head h2{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .kcol-count{font-size:11.5px;padding:1px 7px;border-radius:10px;background:rgba(var(--accent-rgb),0.15);color:var(--cyan-soft);flex-shrink:0;}
+  .kcol-body{flex:1;min-height:0;overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:6px;}
+  .kcol-body .empty{padding:12px 4px;font-size:12px;}
+  .kcard{background:linear-gradient(140deg, rgba(var(--accent-rgb),0.14) 0%, rgba(var(--panel-rgb),0.94) 62%);border:1px solid var(--border);
+    border-left:3px solid var(--cyan);border-radius:7px;padding:7px 8px;cursor:pointer;}
+  .kcard:active{transform:scale(0.98);}
+  .kcard.priority-high{border-left-color:var(--amber);background:linear-gradient(140deg, rgba(255,180,84,0.18) 0%, rgba(var(--panel-rgb),0.94) 62%);}
+  .kcard.priority-low{border-left-color:var(--text-dim);background:linear-gradient(140deg, rgba(137,174,196,0.12) 0%, rgba(var(--panel-rgb),0.94) 62%);}
+  .kcard.overdue{border-color:rgba(255,77,109,0.55);box-shadow:0 0 10px rgba(255,77,109,0.35);}
+  .kcard-title{font-size:13px;line-height:1.4;margin-bottom:4px;word-break:break-word;}
+  .kcard-meta{display:flex;flex-wrap:wrap;gap:3px;}
+  .kbadge{font-size:11px;padding:1px 6px;border-radius:9px;border:1px solid var(--border);color:var(--text-dim);white-space:nowrap;}
+  .sheet .kbadge{font-size:12.5px;padding:2px 8px;}
+  .kbadge.due{color:var(--text);}
+  .kbadge.due.overdue{color:#ffc2cd;border-color:rgba(255,77,109,0.5);background:rgba(255,77,109,0.12);}
+  .kbadge.due.soon{color:var(--amber);border-color:rgba(255,180,84,0.5);background:rgba(255,180,84,0.1);}
+  .kbadge.tag-cyan{color:var(--cyan-soft);border-color:rgba(var(--accent-rgb),0.4);}
+  .kbadge.tag-violet{color:var(--violet);border-color:rgba(138,125,255,0.4);}
+  .kbadge.tag-amber{color:var(--amber);border-color:rgba(255,180,84,0.4);}
+  .kbadge.tag-mint{color:var(--mint);border-color:rgba(61,255,192,0.4);}
+  .kbadge.workload{color:var(--danger);border-color:rgba(255,77,109,0.4);}
+  .kprog{margin-top:5px;height:4px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;}
+  .kprog-bar{height:100%;background:linear-gradient(90deg,var(--cyan-dim),var(--cyan));}
+  .kprog-label{font-size:10.5px;color:var(--text-dim);margin-top:2px;}
+
+  /* ---------- ROADMAP（タスク画面の右1/4） ---------- */
+  #roadPanel{flex:1 1 0;min-width:200px;}
+  #roadPanel .panel-head{padding:7px 9px;gap:5px;flex-wrap:wrap;}
+  #roadPanel .panel-head h2{font-size:13px;flex:1 1 100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .rm-btn{height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--border);background:rgba(var(--accent-rgb),0.08);font-size:11.5px;cursor:pointer;white-space:nowrap;}
+  .rm-btn.on{background:rgba(var(--accent-rgb),0.28);color:var(--cyan-soft);}
+  .rm-list{flex:1;min-height:0;overflow-y:auto;padding:6px 8px 14px;}
+  .rm-sec{font-size:11.5px;color:var(--cyan-soft);letter-spacing:0.03em;margin:10px 0 4px;padding-bottom:3px;border-bottom:1px solid var(--border);}
+  .rm-sec:first-child{margin-top:2px;}
+  .rm-group{margin:5px 0 8px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:rgba(var(--panel-rgb),0.5);}
+  .rm-group-head{display:flex;align-items:center;gap:5px;padding:6px 8px;font-size:12.5px;font-weight:600;cursor:pointer;background:rgba(var(--accent-rgb),0.06);}
+  .rm-group-head .caret{color:var(--text-dim);width:10px;flex-shrink:0;}
+  .rm-group-head .cnt{margin-left:auto;font-size:10.5px;color:var(--text-dim);font-weight:400;white-space:nowrap;}
+  .rm-group.folded .rm-items{display:none;}
+  .rm-item{display:flex;gap:4px 7px;align-items:center;flex-wrap:wrap;padding:5px 8px;border-top:1px solid rgba(90,225,255,0.12);}
+  .rm-dates{font-size:10.5px;color:var(--text-dim);font-variant-numeric:tabular-nums;flex-shrink:0;}
+  .rm-title{font-size:12px;line-height:1.35;flex:1 1 100%;word-break:break-word;}
+  .rm-item.active{background:rgba(76,217,100,0.1);}
+  .rm-item.active .rm-dates{color:#4cd964;}
+  .rm-item.late .rm-dates{color:#ff8fa3;}
+  .rm-item.st-done{opacity:0.45;}
+  .rm-item.st-done .rm-title{text-decoration:line-through;}
+  .rm-item.st-delayed .rm-title{color:var(--amber);}
+  .rm-item.st-unneeded{opacity:0.35;}
+  .rm-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--cyan);}
+  .rm-dot.milestone{border-radius:2px;transform:rotate(45deg);background:var(--amber);}
+
+  /* ---------- TAB BAR ---------- */
+  nav.tabbar{flex-shrink:0;display:flex;height:calc(var(--tabbar-h) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);
+    background:rgba(4,9,18,0.96);border-top:1px solid var(--border);}
+  .tab{flex:1;border:none;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    font-size:13px;color:var(--text-dim);cursor:pointer;position:relative;}
+  .tab .ico{font-size:22px;line-height:1;}
+  .tab.active{color:var(--cyan-soft);}
+  .tab.active::before{content:"";position:absolute;top:0;left:25%;right:25%;height:3px;border-radius:0 0 3px 3px;background:var(--cyan);box-shadow:0 0 10px var(--cyan);}
+
+  /* ---------- SHEET (task detail / load) ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:flex-end;justify-content:center;z-index:100;}
+  .overlay.open{display:flex;}
+  .sheet{width:min(720px,100%);max-height:85vh;overflow-y:auto;background:var(--panel-solid);border:1px solid var(--border);border-bottom:none;
+    border-radius:16px 16px 0 0;padding:18px 20px calc(24px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,0.5);}
+  .sheet h3{margin:0 0 10px;font-size:19px;line-height:1.4;word-break:break-word;}
+  .sheet-grip{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,0.25);margin:-6px auto 14px;}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14.5px;margin:10px 0;}
+  .kv dt{color:var(--text-dim);}
+  .kv dd{margin:0;}
+  .steps{list-style:none;padding:0;margin:10px 0;}
+  .steps li{padding:7px 0;font-size:15px;border-bottom:1px solid rgba(90,225,255,0.12);display:flex;gap:10px;}
+  .steps li.done{color:var(--text-dim);text-decoration:line-through;}
+  .desc{white-space:pre-wrap;font-size:14.5px;line-height:1.6;background:rgba(0,0,0,0.25);border-radius:8px;padding:12px;margin-top:10px;word-break:break-word;}
+  .sheet-actions{display:flex;justify-content:flex-end;margin-top:16px;gap:10px;}
+  .load-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(90,225,255,0.12);}
+  .load-row .name{font-size:15px;flex:1;}
+  .load-row .st{font-size:13px;color:var(--text-dim);text-align:right;}
+  .load-row .st.ok{color:#4cd964;}
+  .hint{font-size:13px;color:var(--text-dim);line-height:1.6;margin-top:12px;}
+
+  .toast{position:fixed;left:50%;bottom:calc(var(--tabbar-h) + 20px);transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
+    background:var(--panel-solid);border:1px solid var(--cyan);color:var(--cyan-soft);padding:10px 18px;border-radius:10px;font-size:14px;
+    transition:opacity .25s, transform .25s;z-index:200;max-width:90vw;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* ---------- PORTRAIT ---------- */
+  @media (orientation: portrait){
+    #viewCal{flex-direction:column;}
+    #calPanel{flex:1.25;}
+    #dayPanel{flex:1;}
+    .brand p{display:none;}
+  }
+  /* ---------- THEME MENU ---------- */
+  .theme-switch{position:relative;}
+  .theme-menu{position:absolute;top:calc(100% + 6px);right:0;display:none;flex-direction:column;min-width:200px;z-index:150;overflow:hidden;
+    background:var(--panel-solid);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,0.5);}
+  .theme-menu.open{display:flex;}
+  .theme-menu-item{background:transparent;border:none;border-bottom:1px solid var(--border);text-align:left;padding:14px 16px;font-size:15px;cursor:pointer;}
+  .theme-menu-item:last-child{border-bottom:none;}
+  .theme-menu-item.active{color:var(--cyan-soft);font-weight:600;}
+  .theme-menu-item.active::after{content:" ✓";}
+  /* 背景画像の操作（アクティブ②のときだけ表示） */
+  .bg-ctl-label{padding:8px 16px 4px;font-size:12px;color:var(--text-dim);border-top:1px solid var(--border);background:rgba(var(--accent-rgb),0.05);}
+  .bg-ctl{display:flex;gap:6px;padding:6px 10px 10px;background:rgba(var(--accent-rgb),0.05);}
+  .bg-ctl button{flex:1;height:40px;border-radius:8px;border:1px solid var(--border);background:rgba(var(--accent-rgb),0.08);font-size:13px;cursor:pointer;white-space:nowrap;}
+  .bg-ctl button.on{background:rgba(255,180,84,0.2);color:var(--amber);border-color:rgba(255,180,84,0.5);}
+  html:not([data-theme="active2"]) .bg-ctl,html:not([data-theme="active2"]) .bg-ctl-label{display:none;}
+  #bgInfo{border-top:none;padding-top:0;padding-bottom:10px;}
+
+  /* ---------- 5. アクティブ①（PC版と同じ: 配色＋メッシュ/コードレイン、背景画像なし）
+                6. アクティブ②（アクティブ①＋背景画像を透過表示） ---------- */
+  html[data-theme^="active"]{
+    --navy-950:#0e1217; --navy-900:#11151b;
+    --cyan:#5ea5f3; --cyan-soft:#34d399; --cyan-dim:#1a3450;
+    --violet:#a78bfa; --amber:#fbbf24; --mint:#4ade80; --danger:#ff4d6d;
+    --text:#e7eaef; --text-dim:#9aa4b0;
+    --accent-rgb:94,165,243; --panel-rgb:22,28,35; --bg-mid-rgb:17,21,27;
+    --border:rgba(38,47,58,0.7); --panel:rgba(22,28,35,0.2); --panel-solid:#161c23;
+  }
+  /* body must stay transparent: its own background would paint over the negative z-index background layers */
+  html[data-theme^="active"]{background:#0e1217;}
+  html[data-theme^="active"] body{background:transparent;}
+  html[data-theme^="active"] .panel{backdrop-filter:none;-webkit-backdrop-filter:none;}
+  html[data-theme^="active"] header,html[data-theme^="active"] nav.tabbar{background:rgba(14,18,23,0.5);}
+  html[data-theme^="active"] .cal-cell:not(.sun):not(.sat):not(.kyu),
+  html[data-theme^="active"] .wk-cell:not(.sun):not(.sat):not(.kyu){background:linear-gradient(155deg, rgba(27,34,43,0.32) 0%, rgba(17,21,27,0.22) 100%);}
+  html[data-theme^="active"] .mesh,html[data-theme^="active"] .page-glow,html[data-theme^="active"] .coderain{display:block;}
+  html[data-theme="active2"] .bg-layer{display:block;}
+
+  .bg-layer{display:none;position:fixed;inset:0;z-index:-3;pointer-events:none;background-size:cover;background-position:right bottom;background-repeat:no-repeat;
+    opacity:0;transition:opacity 3s ease;}
+  .bg-layer.show{opacity:0.35;}
+  .mesh{display:none;position:fixed;inset:-15%;z-index:-2;pointer-events:none;
+    background:
+      radial-gradient(32% 40% at 14% 18%, rgba(88,166,255,0.34), transparent),
+      radial-gradient(28% 36% at 82% 14%, rgba(198,120,221,0.30), transparent),
+      radial-gradient(34% 40% at 20% 78%, rgba(45,212,191,0.22), transparent),
+      radial-gradient(38% 44% at 82% 82%, rgba(251,191,36,0.18), transparent);
+    filter:blur(70px);opacity:0.7;
+    animation:mmMeshmove 17s ease-in-out infinite;
+  }
+  @keyframes mmMeshmove{
+    0%,100%{transform:translate(0,0) scale(1);}
+    33%{transform:translate(3%,-2%) scale(1.08);}
+    66%{transform:translate(-3%,2%) scale(1.04);}
+  }
+  .page-glow{display:none;position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background:radial-gradient(900px circle at var(--mmx,50%) var(--mmy,35%), rgba(94,165,243,0.14), transparent 70%);
+  }
+  .coderain{display:none;position:fixed;top:-50%;width:1100px;height:220vh;z-index:-1;overflow:hidden;pointer-events:none;
+    transform:perspective(480px) rotateX(12deg) rotateY(-21deg) rotateZ(3deg);transform-origin:center center;
+    -webkit-mask-image:linear-gradient(180deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image:linear-gradient(180deg, transparent, #000 12%, #000 88%, transparent);
+  }
+  /* 右側の2本は右端寄せ。幅が固定pxなので right:% だと広い画面で画面外に出てしまう。
+     左端を画面幅の%で決めて、どの画面幅でも同じ位置に見えるようにする */
+  .coderain.cr1{left:40%;}
+  .coderain.cr2{left:70%;width:950px;}
+  .coderain.cr3{left:8%;width:820px;transform:perspective(480px) rotateX(12deg) rotateY(21deg) rotateZ(-13deg);}
+  .coderain pre{position:absolute;top:0;left:0;width:100%;margin:0;font:600 15px/1.85 'Consolas','SFMono-Regular',monospace;
+    white-space:pre;opacity:0.5;animation:mmCodedrift 60s linear infinite;text-shadow:0 0 14px currentColor;}
+  .coderain.cr2 pre{animation-duration:82s;opacity:0.34;font-size:13px;}
+  .coderain.cr3 pre{font-size:10px;}
+  @keyframes mmCodedrift{ 0%{transform:translateY(0);} 100%{transform:translateY(-50%);} }
+  .mm-tok-kw{color:#c678dd;} .mm-tok-fn{color:#61afef;} .mm-tok-str{color:#98c379;}
+  .mm-tok-type{color:#56b6c2;} .mm-tok-var{color:#e5c07b;} .mm-tok-cmt{color:#7f848e;} .mm-tok-pn{color:#8a94a3;}
+
+  /* タブレット幅ではヘッダーのボタンをアイコンだけにして、流れる通知の幅を確保する */
+  @media (max-width: 1200px){
+    header .hbtn .lbl{display:none;}
+    header .hbtn{padding:0 10px;}
+  }
+  @media (orientation: portrait){
+    .task-main{flex-direction:column;}
+    .kanban{flex:3 1 0;}
+    #roadPanel{flex:1 1 0;min-width:0;}
+  }
+  @media (max-width: 700px){
+    .kcol{flex:0 0 46%;}
+    .today-badge{display:none;}
+    .hbtn .lbl{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="bg-layer" id="bgLayerA"></div>
+<div class="bg-layer" id="bgLayerB"></div>
+<div class="mesh"></div>
+<div class="page-glow"></div>
+<div class="coderain cr1"><pre id="mmRainText1"></pre></div>
+<div class="coderain cr2"><pre id="mmRainText2"></pre></div>
+<div class="coderain cr3"><pre id="mmRainText3"></pre></div>
+<div id="app">
+  <header>
+    <div class="brand-mark">◈</div>
+    <div class="brand">
+      <h1>スケジュール&タスク</h1>
+      <p id="loadedInfo">データ未読込</p>
+    </div>
+    <div class="header-alert" id="headerAlert"><div class="header-alert-track" id="headerAlertTrack"></div></div>
+    <!-- ボタンの並び: 常時点灯 → 着せ替え → 読込 → コンパクト → 最大化 → 日時 -->
+    <button class="hbtn" id="wakeBtn" title="画面を消さない">☀<span class="lbl"> 常時点灯</span></button>
+    <div class="theme-switch">
+      <button class="hbtn" id="themeBtn" title="着せ替え">🎨<span class="lbl"> 着せ替え</span></button>
+      <div class="theme-menu" id="themeMenu">
+        <button class="theme-menu-item" data-theme="">1. 標準</button>
+        <button class="theme-menu-item" data-theme="active1">5. アクティブ①</button>
+        <button class="theme-menu-item" data-theme="active2">6. アクティブ②</button>
+        <div class="bg-ctl-label">背景画像</div>
+        <div class="bg-ctl">
+          <button id="bgPrevBtn" title="前の背景">⏮ 前へ</button>
+          <button id="bgNextBtn" title="次の背景">次へ ⏭</button>
+          <button id="bgLockBtn" title="背景の切り替えを止める／再開する">🔓 ロック</button>
+        </div>
+        <div class="bg-ctl">
+          <button id="bgPickBtn" title="タブレット内の画像を背景にする（タブレット内にだけ保存）">🖼 画像を選ぶ</button>
+          <button id="bgClearBtn" title="選んだ背景画像を消す">🗑 選んだ画像を消す</button>
+        </div>
+        <div class="bg-ctl-label" id="bgInfo"></div>
+      </div>
+    </div>
+    <button class="hbtn primary" id="loadBtn">📂<span class="lbl"> 読込</span></button>
+    <button class="hbtn" id="compactBtn" title="コンパクト表示（今日の予定だけ）">▭<span class="lbl"> コンパクト</span></button>
+    <button class="hbtn" id="fsBtn" title="全画面">⛶</button>
+    <div class="today-badge" id="todayBadge"></div>
+  </header>
+
+  <main>
+    <!-- ============ CALENDAR VIEW ============ -->
+    <section class="view active" id="viewCal">
+      <div class="panel" id="calPanel">
+        <div class="panel-head">
+          <button class="hbtn" id="calPrev">‹</button>
+          <h2 id="calTitle"></h2>
+          <button class="hbtn" id="calNext">›</button>
+          <div class="panel-marquee" id="calSchedCheckAlert"><div class="panel-marquee-track pink" id="calSchedCheckAlertTrack"></div></div>
+          <div class="cal-mode" id="calMode">
+            <button data-mode="weekday" title="土日の幅を狭くする">平日</button>
+            <button data-mode="weekend" title="月〜金の幅を狭くする">土日</button>
+          </div>
+          <button class="hbtn" id="calToday">今日</button>
+        </div>
+        <div class="cal-body" id="calBody">
+          <div class="cal-dow-row" id="calDowRow"></div>
+          <div class="cal-grid" id="calGrid"></div>
+        </div>
+      </div>
+      <div class="panel" id="dayPanel">
+        <div class="day-scroll" id="dayScroll">
+          <div class="sec-h"><span class="ttl">📅 週間カレンダ</span><span class="sub" id="weekSub"></span></div>
+          <div class="week-grid" id="weekGrid"></div>
+          <div class="sec-h" style="margin-top:12px;"><h2 id="dayTitle"></h2><span class="sub" id="daySub"></span></div>
+          <div class="next-row" style="padding:0 0 6px;"><div class="panel-marquee" id="calNextAlert"><div class="panel-marquee-track yellow" id="calNextAlertTrack"></div></div></div>
+          <div class="day-list" id="dayList"></div>
+          <div class="sec-h" id="dueHead" style="margin-top:12px;"><span class="ttl">✅ この日が期限のタスク</span><span class="sub" id="dueSub"></span></div>
+          <div class="due-tasks" id="dueTasks"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ KANBAN VIEW ============ -->
+    <section class="view" id="viewTask">
+      <div class="task-top">
+        <div class="stat-row" id="statRow"></div>
+        <div class="panel-marquee" id="taskCheckAlert"><div class="panel-marquee-track orange" id="taskCheckAlertTrack"></div></div>
+      </div>
+      <div class="task-main">
+        <div class="kanban" id="kanban"></div>
+        <!-- ロードマップ（タスクの右 1/4） -->
+        <div class="panel" id="roadPanel">
+          <div class="panel-head">
+            <h2 id="roadTitle">🗺 ロードマップ</h2>
+            <button class="rm-btn" id="rmHideDone" title="【完】【延】【不要】の項目を隠す">完了を隠す</button>
+            <button class="rm-btn" id="rmFoldAll">すべて折りたたむ</button>
+          </div>
+          <div class="rm-list" id="rmList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ AI SECRETARY VIEW (巡回ログ) ============ -->
+    <section class="view" id="viewAi">
+      <div class="panel" id="aiPanel">
+        <div class="panel-head"><h2>🤖 AI秘書メッセージ</h2><span class="sub" id="aiSub"></span></div>
+        <div class="ai-body" id="aiBody"></div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="viewCal"><span class="ico">📅</span>予定</button>
+    <button class="tab" data-view="viewTask"><span class="ico">📋</span>タスク／ロードマップ</button>
+    <button class="tab" data-view="viewAi"><span class="ico">🤖</span>AI秘書</button>
+  </nav>
+</div>
+
+<!-- task detail sheet -->
+<div class="overlay" id="taskSheet"><div class="sheet" id="taskSheetBody"></div></div>
+
+<!-- load sheet -->
+<div class="overlay" id="loadSheet">
+  <div class="sheet">
+    <div class="sheet-grip"></div>
+    <h3>データの読み込み</h3>
+    <div id="loadRows"></div>
+    <div class="sheet-actions">
+      <button class="hbtn" id="loadClose">閉じる</button>
+      <button class="hbtn primary" id="loadPick">📂 ファイルを選ぶ</button>
+    </div>
+    <p class="hint">
+      PCの <b>schedule.mw</b>・<b>taskList.md</b>・ロードマップ(.mw)・AI秘書の巡回ログ(<b>巡回_〜.txt</b>) を Googleドライブなどに置き、ここから選んでください。複数まとめて選択できます。巡回ログを複数選んだ場合は、いちばん新しいものを使います。<br>
+      ファイルの種類は自動で判別します。読み込んだ内容はタブレットに保存されるので、次回は開くだけで表示されます。<br>
+      ※タブレット版は閲覧専用です。編集はPC版で行ってください。
+    </p>
+  </div>
+</div>
+<input type="file" id="bgFileInput" multiple accept="image/*" style="display:none">
+<input type="file" id="fileInput" multiple accept=".mw,.md,.txt,text/plain,text/markdown,*/*" style="display:none">
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =====================================================================
+     UTILITIES
+  ===================================================================== */
+  function pad(n){ return n < 10 ? "0"+n : ""+n; }
+  function fmtDate(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function todayObj(){ var d=new Date(); d.setHours(0,0,0,0); return d; }
+  function todayStr(){ return fmtDate(new Date()); }
+  function timeStr(d){ d=d||new Date(); return pad(d.getHours())+":"+pad(d.getMinutes()); }
+  function uid(){ return "n"+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+  function clearChildren(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+  function el(tag, cls, text){
+    var e=document.createElement(tag);
+    if(cls) e.className=cls;
+    if(text!=null) e.textContent=text;
+    return e;
+  }
+  var toastTimer=null;
+  function showToast(msg){
+    var t=document.getElementById("toast");
+    t.textContent=msg; t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(function(){ t.classList.remove("show"); }, 2600);
+  }
+  function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function lsSet(k, v){ try{ localStorage.setItem(k, v); return true; }catch(e){ return false; } }
+
+  var MONTH_NAMES=["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+  var DOW_NAMES=["日","月","火","水","木","金","土"];
+  var COLUMN_ICONS={"To Do":"📋","Backlog":"🗂","In Progress":"⚙️","urgent tasks":"🔥","Done":"✅"};
+  var NOTE_COLORS=["cyan","violet","amber","mint"];
+
+  /* =====================================================================
+     PARSERS (PC版と同じロジック)
+  ===================================================================== */
+  function dateRange(startStr, endStr){
+    var out=[];
+    var d=new Date(startStr+"T00:00:00");
+    var end=new Date(endStr+"T00:00:00");
+    var guard=0;
+    while(d.getTime() <= end.getTime() && guard < 400){
+      out.push(fmtDate(d));
+      d.setDate(d.getDate()+1);
+      guard++;
+    }
+    return out;
+  }
+  function addDaysStr(dateStr, n){
+    var d=new Date(dateStr+"T00:00:00");
+    d.setDate(d.getDate()+n);
+    return fmtDate(d);
+  }
+
+  function parseScheduleMW(text){
+    var events=[];
+    var lines=(text||"").split(/\r?\n/);
+    var reTimed=/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}):\s*(.*)$/;
+    var reSpan=/^(\d{4}-\d{2}-\d{2})\s*\/\s*(\d+)\s*days?:\s*(.*)$/;
+    var reAllDay=/^(\d{4}-\d{2}-\d{2}):\s*(.*)$/;
+    lines.forEach(function(raw){
+      var line=raw.trim();
+      if(!line) return;
+      if(/^title\s*:/i.test(line)) return;
+      var cancelled=false;
+      if(line.charAt(0)==="×"){ cancelled=true; line=line.slice(1); }
+      var m;
+      if((m=line.match(reTimed))){
+        events.push({id:uid(), startDate:m[1], startTime:m[2], endDate:m[3], endTime:m[4], title:m[5].trim(), allDay:false, cancelled:cancelled});
+      }else if((m=line.match(reSpan))){
+        var days=parseInt(m[2],10)||1;
+        var start=new Date(m[1]+"T00:00:00");
+        var end=new Date(start); end.setDate(end.getDate()+days-1);
+        events.push({id:uid(), startDate:m[1], startTime:"", endDate:fmtDate(end), endTime:"", title:m[3].trim(), allDay:true, cancelled:cancelled});
+      }else if((m=line.match(reAllDay))){
+        events.push({id:uid(), startDate:m[1], startTime:"", endDate:m[1], endTime:"", title:m[2].trim(), allDay:true, cancelled:cancelled});
+      }
+    });
+    return events;
+  }
+
+  function buildEventsByDate(events){
+    var map={};
+    events.forEach(function(ev){
+      if(ev.cancelled) return;
+      var days=dateRange(ev.startDate, ev.endDate);
+      days.forEach(function(dateStr, i){
+        map[dateStr]=map[dateStr]||[];
+        map[dateStr].push({
+          title:ev.title,
+          time:ev.allDay?"":ev.startTime,
+          endTime:ev.allDay?"":ev.endTime,
+          allDay:ev.allDay,
+          isContinuation:i>0
+        });
+      });
+    });
+    Object.keys(map).forEach(function(k){
+      map[k].sort(function(a,b){
+        if(a.allDay!==b.allDay) return a.allDay?-1:1;
+        return (a.time||"").localeCompare(b.time||"");
+      });
+    });
+    return map;
+  }
+
+  function parseTaskList(text){
+    var lines=(text||"").split(/\r?\n/);
+    var columns=[];
+    var tasks=[];
+    var curColumn=null, curTask=null, mode=null, descLines=[];
+
+    for(var i=0;i<lines.length;i++){
+      var line=lines[i];
+      var trimmed=line.trim();
+
+      if(/^##\s+/.test(line) && !/^###/.test(line)){
+        if(mode==="desc" && curTask){ curTask.description=descLines.join("\n").trim(); }
+        curColumn=trimmed.replace(/^##\s+/,"").trim();
+        if(columns.indexOf(curColumn)===-1) columns.push(curColumn);
+        curTask=null; mode=null; descLines=[];
+        continue;
+      }
+      if(/^###\s+/.test(line)){
+        if(mode==="desc" && curTask){ curTask.description=descLines.join("\n").trim(); }
+        curTask={
+          id:uid(), title:trimmed.replace(/^###\s+/,"").trim(), column:curColumn||"To Do",
+          tags:[], priority:"medium", workload:"Normal", start:"", due:"",
+          steps:[], description:""
+        };
+        tasks.push(curTask);
+        mode=null; descLines=[];
+        continue;
+      }
+      if(!curTask) continue;
+
+      if(mode==="desc"){
+        if(/^\s*```\s*$/.test(line)){
+          curTask.description=descLines.join("\n").trim();
+          mode=null; descLines=[];
+        }else{
+          descLines.push(line.replace(/^ {4}/,""));
+        }
+        continue;
+      }
+
+      var mm;
+      if((mm=trimmed.match(/^-\s*id:\s*(.+)$/))){ curTask.id=mm[1].trim(); continue; }
+      if((mm=trimmed.match(/^-\s*tags:\s*\[(.*)\]$/))){ curTask.tags=mm[1].split(",").map(function(s){return s.trim();}).filter(Boolean); continue; }
+      if((mm=trimmed.match(/^-\s*priority:\s*(.+)$/))){ curTask.priority=mm[1].trim(); continue; }
+      if((mm=trimmed.match(/^-\s*workload:\s*(.+)$/))){ curTask.workload=mm[1].trim(); continue; }
+      if((mm=trimmed.match(/^-\s*start:\s*(.+)$/))){ curTask.start=mm[1].trim(); continue; }
+      if((mm=trimmed.match(/^-\s*due:\s*(.+)$/))){ curTask.due=mm[1].trim(); continue; }
+      if(/^-\s*defaultExpanded:/.test(trimmed)) continue;
+      if(/^-\s*steps:\s*$/.test(trimmed)){ mode="steps"; continue; }
+      if(mode==="steps"){
+        var sm=trimmed.match(/^-\s*\[( |x)\]\s*(.*)$/);
+        if(sm){ curTask.steps.push({done:sm[1]==="x", text:sm[2]}); continue; }
+        mode=null;
+      }
+      if(/^```md\s*$/.test(trimmed)){ mode="desc"; descLines=[]; continue; }
+    }
+    if(mode==="desc" && curTask){ curTask.description=descLines.join("\n").trim(); }
+
+    if(columns.length===0) columns=["To Do","Backlog","In Progress","urgent tasks","Done"];
+    return {columns:columns, tasks:tasks};
+  }
+
+  function splitTitleTag(str){
+    var m=str.match(/^(.*?)\s*#([\w\-]+)\s*$/);
+    if(m) return { title:m[1].trim(), tag:m[2] };
+    return { title:str.trim(), tag:"" };
+  }
+  function detectStatus(title){
+    if(/^【完】/.test(title)) return "done";
+    if(/^【延】/.test(title)) return "delayed";
+    if(/^【不要】/.test(title)) return "unneeded";
+    return null;
+  }
+
+  function parseRoadmapMW(text){
+    var lines=(text||"").split(/\r?\n/);
+    var stack=[];
+    var rows=[];
+    var currentRow=null;
+    var lastEndDate=null;
+    var colorCaptureDepth=0;
+
+    function sectionParts(){
+      return stack.filter(function(s){return s.type==="section";}).map(function(s){return s.name;});
+    }
+    function makeItem(start,end,title,tag,milestone){
+      return { start:start, end:end, title:title, tag:tag, milestone:milestone, status:detectStatus(title) };
+    }
+
+    lines.forEach(function(raw){
+      var trimmed=raw.trim();
+      if(colorCaptureDepth>0){
+        if(/^section\s+/i.test(trimmed)){ colorCaptureDepth++; return; }
+        if(/^end section$/i.test(trimmed)){ colorCaptureDepth--; return; }
+        return;
+      }
+      if(!trimmed) return;
+      if(/^title\s*:/i.test(trimmed)) return;
+
+      var msec=trimmed.match(/^section\s+(.+)$/i);
+      if(msec){
+        var name=msec[1].trim();
+        if(name==="色調整"){ colorCaptureDepth=1; return; }
+        stack.push({type:"section", name:name});
+        return;
+      }
+      if(/^end section$/i.test(trimmed)){ stack.pop(); return; }
+
+      var mgrp=trimmed.match(/^group\s+(.+)$/i);
+      if(mgrp){
+        var groupName=mgrp[1].trim();
+        currentRow={ sectionParts:sectionParts(), groupName:groupName, items:[] };
+        stack.push({type:"group", name:groupName});
+        rows.push(currentRow);
+        lastEndDate=null;
+        return;
+      }
+      if(/^endGroup$/i.test(trimmed)){
+        stack.pop();
+        currentRow=null;
+        lastEndDate=null;
+        return;
+      }
+
+      var target=currentRow;
+      if(!target){
+        target={ sectionParts:sectionParts(), groupName:null, items:[] };
+        rows.push(target);
+        currentRow=target;
+      }
+
+      var m;
+      if((m=trimmed.match(/^(\d{4}-\d{2}-\d{2})\s*\/\s*(\d+)\s*days?\s*:\s*(.+)$/))){
+        var days=parseInt(m[2],10)||1;
+        var endD=addDaysStr(m[1], days-1);
+        var tt=splitTitleTag(m[3]);
+        target.items.push(makeItem(m[1], endD, tt.title, tt.tag, false));
+        lastEndDate=endD;
+        return;
+      }
+      if((m=trimmed.match(/^after\s+(\d+)\s*days?\s*:\s*(.+)$/i))){
+        var days2=parseInt(m[1],10)||1;
+        var start2=lastEndDate?addDaysStr(lastEndDate,1):todayStr();
+        var end2=addDaysStr(start2, days2-1);
+        var tt2=splitTitleTag(m[2]);
+        target.items.push(makeItem(start2, end2, tt2.title, tt2.tag, false));
+        lastEndDate=end2;
+        return;
+      }
+      if((m=trimmed.match(/^(\d{4}-\d{2}-\d{2})\s*:\s*(.+)$/))){
+        var tt3=splitTitleTag(m[2]);
+        target.items.push(makeItem(m[1], m[1], tt3.title, tt3.tag, true));
+        lastEndDate=m[1];
+        return;
+      }
+    });
+    return rows.filter(function(r){ return r.items.length>0; });
+  }
+
+  /* =====================================================================
+     STATE + PERSISTENCE (読み込んだファイル本文をタブレット内に保存)
+  ===================================================================== */
+  var LS_PREFIX="skbt_";
+  var KINDS={
+    schedule:{label:"スケジュール (schedule.mw)"},
+    tasks:{label:"タスク (taskList.md)"},
+    roadmap:{label:"ロードマップ (.mw)"},
+    patrol:{label:"AI秘書 巡回ログ (.txt)"}
+  };
+  var store={}; // kind -> {text, name, loadedAt}
+  Object.keys(KINDS).forEach(function(k){
+    var raw=lsGet(LS_PREFIX+k);
+    if(raw){ try{ store[k]=JSON.parse(raw); }catch(e){} }
+  });
+
+  var scheduleEvents=[], eventsByDate={};
+  var taskColumns=[], tasks=[];
+  var roadmapRows=[];
+
+  function applyStore(){
+    scheduleEvents=store.schedule ? parseScheduleMW(store.schedule.text) : [];
+    eventsByDate=buildEventsByDate(scheduleEvents);
+    var p=store.tasks ? parseTaskList(store.tasks.text) : {columns:[], tasks:[]};
+    taskColumns=p.columns; tasks=p.tasks;
+    roadmapRows=store.roadmap ? parseRoadmapMW(store.roadmap.text) : [];
+    updateLoadedInfo();
+  }
+
+  // Decides which board a picked file feeds: 巡回ログ .txt = patrol; .md = tasks; .mw with section/group = roadmap; other .mw = schedule.
+  function detectKind(name, text){
+    var lower=(name||"").toLowerCase();
+    if(/\.txt$/.test(lower) && (/巡回/.test(name) || /^\s*巡回結果/.test(text) || /^[■\s]*[①②]?\s*(予定チェック|タスク期限チェック)/m.test(text))) return "patrol";
+    if(/\.md$/.test(lower) || /^##\s+/m.test(text) && /^###\s+/m.test(text)) return "tasks";
+    if(/schedule/.test(lower)) return "schedule";
+    if(/^\s*(section|group)\s+/im.test(text)) return "roadmap";
+    if(/^\s*×?\d{4}-\d{2}-\d{2}/m.test(text)) return "schedule";
+    return null;
+  }
+
+  function readFile(file){
+    return new Promise(function(resolve){
+      var r=new FileReader();
+      r.onload=function(){ resolve(String(r.result||"")); };
+      r.onerror=function(){ resolve(null); };
+      r.readAsText(file, "utf-8");
+    });
+  }
+
+  async function handleFiles(fileList){
+    var files=Array.prototype.slice.call(fileList||[]);
+    if(!files.length) return;
+    // 巡回_YYYYMMDD_HHMM.txt は名前順＝時刻順。名前順に処理して、最後（＝最新）の巡回ログが残るようにする
+    files.sort(function(a,b){ return a.name<b.name?-1:(a.name>b.name?1:0); });
+    var loaded=[], skipped=[], patrolName=null;
+    for(var i=0;i<files.length;i++){
+      var f=files[i];
+      var text=await readFile(f);
+      var kind=text==null ? null : detectKind(f.name, text);
+      if(!kind){ skipped.push(f.name); continue; }
+      store[kind]={text:text, name:f.name, loadedAt:Date.now(), modifiedAt:f.lastModified||null};
+      lsSet(LS_PREFIX+kind, JSON.stringify(store[kind]));
+      if(kind==="patrol"){ patrolName=f.name; continue; }
+      loaded.push(f.name);
+    }
+    if(patrolName) loaded.push(patrolName);
+    applyStore();
+    renderAll();
+    renderLoadRows();
+    if(loaded.length) showToast(loaded.join("、")+" を読み込みました");
+    if(skipped.length) setTimeout(function(){ showToast("判別できないファイル: "+skipped.join("、")); }, loaded.length?2800:0);
+  }
+
+  function fmtStamp(ms){
+    if(!ms) return "";
+    var d=new Date(ms);
+    return (d.getMonth()+1)+"/"+d.getDate()+" "+timeStr(d);
+  }
+  function updateLoadedInfo(){
+    var stamps=Object.keys(store).map(function(k){ return store[k] && store[k].loadedAt; }).filter(Boolean);
+    var info=document.getElementById("loadedInfo");
+    info.textContent=stamps.length ? "最終読込 "+fmtStamp(Math.max.apply(null, stamps)) : "データ未読込 — 右上の「読込」から";
+  }
+  function renderLoadRows(){
+    var wrap=document.getElementById("loadRows");
+    clearChildren(wrap);
+    Object.keys(KINDS).forEach(function(k){
+      var row=el("div","load-row");
+      row.appendChild(el("div","name",KINDS[k].label));
+      var s=store[k];
+      var st=el("div","st"+(s?" ok":""), s ? ("✓ "+s.name+"\n読込 "+fmtStamp(s.loadedAt)+(s.modifiedAt?"／更新 "+fmtStamp(s.modifiedAt):"")) : "未読込");
+      st.style.whiteSpace="pre-line";
+      row.appendChild(st);
+      wrap.appendChild(row);
+    });
+  }
+
+  /* =====================================================================
+     CALENDAR
+  ===================================================================== */
+  var calState={year:new Date().getFullYear(), month:new Date().getMonth()};
+  var selectedDayStr=todayStr();
+
+  function sameYMD(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+  function nthMondayOfMonth(year, month, n){
+    var d=new Date(year, month, 1);
+    var firstMonday=1 + ((8 - d.getDay()) % 7);
+    return new Date(year, month, firstMonday + (n-1)*7);
+  }
+  function equinoxDay(year, spring){
+    var base=spring?20.8431:23.2488;
+    var day=Math.floor(base + 0.242194*(year-1980) - Math.floor((year-1980)/4));
+    return new Date(year, spring?2:8, day);
+  }
+  function isJapaneseHoliday(d){
+    var y=d.getFullYear(), md=(d.getMonth()+1)+"-"+d.getDate();
+    var fixed=["1-1","2-11","2-23","4-29","5-3","5-4","5-5","8-11","11-3","11-23"];
+    if(fixed.indexOf(md)!==-1) return true;
+    if(sameYMD(d, nthMondayOfMonth(y,0,2))) return true;
+    if(sameYMD(d, nthMondayOfMonth(y,6,3))) return true;
+    if(sameYMD(d, nthMondayOfMonth(y,8,3))) return true;
+    if(sameYMD(d, nthMondayOfMonth(y,9,2))) return true;
+    if(sameYMD(d, equinoxDay(y,true))) return true;
+    if(sameYMD(d, equinoxDay(y,false))) return true;
+    return false;
+  }
+
+  function scheduleEventColorClass(title){
+    title=title||"";
+    if(title.indexOf("営業会議")!==-1) return "sched-red";
+    if(title.indexOf("(営業)")!==-1) return "sched-red";
+    if(title.indexOf("事業部会")!==-1 || title.indexOf("課長会")!==-1) return "sched-cyan";
+    if(title.indexOf("部会")!==-1 || title.indexOf("課会")!==-1) return "sched-yellow";
+    if(title.indexOf("社内朝会")!==-1 || title.indexOf("社内昼会")!==-1 || title.indexOf("社内夕会")!==-1) return "sched-darkgray";
+    if(title.indexOf("面談")!==-1) return "sched-green";
+    if(title.indexOf("検討会")!==-1) return "sched-purple";
+    if(title.indexOf("[研]")!==-1) return "sched-red";
+    if(title.indexOf("[移]")!==-1) return "sched-orange";
+    if(title.indexOf("[会]")!==-1) return "sched-red";
+    return "";
+  }
+
+  function renderDowRow(){
+    var row=document.getElementById("calDowRow");
+    clearChildren(row);
+    DOW_NAMES.forEach(function(name,i){
+      row.appendChild(el("div","cal-dow"+(i===0?" sun":(i===6?" sat":"")), name));
+    });
+  }
+
+  // 「平日」モード=土日の列を狭く / 「土日」モード=月〜金の列を狭く（PC版の狭い列幅 0.55fr と同じ比率）
+  var calMode=lsGet(LS_PREFIX+"calMode")==="weekend" ? "weekend" : "weekday";
+  function calColumns(){
+    return calMode==="weekend" ? "1fr repeat(5, 0.55fr) 1fr" : "0.55fr repeat(5, 1fr) 0.55fr";
+  }
+  function applyCalMode(){
+    document.getElementById("calDowRow").style.gridTemplateColumns=calColumns();
+    document.getElementById("calGrid").style.gridTemplateColumns=calColumns();
+    document.querySelectorAll("#calMode button").forEach(function(b){ b.classList.toggle("on", b.dataset.mode===calMode); });
+  }
+  document.querySelectorAll("#calMode button").forEach(function(b){
+    b.addEventListener("click", function(){
+      calMode=b.dataset.mode;
+      lsSet(LS_PREFIX+"calMode", calMode);
+      applyCalMode();
+      renderCalendar();
+    });
+  });
+
+  // 曜日の色分け: 土=sat(青) / 日=sun(赤) / [休]のある日=kyu(赤) / 祝日=jph(日付の数字だけ赤)
+  function dayClasses(date, dStr){
+    var c=[];
+    if(date.getDay()===0) c.push("sun");
+    if(date.getDay()===6) c.push("sat");
+    if(isJapaneseHoliday(date)) c.push("jph");
+    if((eventsByDate[dStr]||[]).some(function(ev){ return (ev.title||"").indexOf("[休]")!==-1; })) c.push("kyu");
+    return c;
+  }
+
+  function selectDay(dStr){
+    selectedDayStr=dStr;
+    var d=new Date(dStr+"T00:00:00");
+    calState={year:d.getFullYear(), month:d.getMonth()};
+    if(isCompact()) renderDayPanel(); else renderCalendar();
+  }
+
+  // How many chips fit in one cell — derived from the rendered cell height so it adapts to orientation.
+  function chipsPerCell(rows){
+    var grid=document.getElementById("calGrid");
+    var h=grid.clientHeight/rows - 22;
+    return Math.max(1, Math.min(5, Math.floor(h/17)));
+  }
+
+  function renderCalendar(){
+    document.getElementById("calTitle").textContent=calState.year+"年 "+MONTH_NAMES[calState.month];
+    var grid=document.getElementById("calGrid");
+    clearChildren(grid);
+
+    var firstOfMonth=new Date(calState.year, calState.month, 1);
+    var startOffset=firstOfMonth.getDay();
+    var gridStart=new Date(calState.year, calState.month, 1-startOffset);
+    var todayS=todayStr();
+    var daysInMonth=new Date(calState.year, calState.month+1, 0).getDate();
+    var rowsNeeded=Math.ceil((startOffset+daysInMonth)/7);
+    grid.style.gridTemplateRows="repeat("+rowsNeeded+", minmax(0, 1fr))";
+    applyCalMode();
+    var showMax=chipsPerCell(rowsNeeded);
+
+    for(var i=0;i<rowsNeeded*7;i++){
+      var cellDate=new Date(gridStart); cellDate.setDate(gridStart.getDate()+i);
+      var dStr=fmtDate(cellDate);
+      var cell=el("div","cal-cell "+dayClasses(cellDate, dStr).join(" "));
+      if(cellDate.getMonth()!==calState.month) cell.classList.add("other-month");
+      if(dStr===todayS) cell.classList.add("today");
+      if(dStr===selectedDayStr) cell.classList.add("selected");
+
+      cell.appendChild(el("div","cal-date",cellDate.getDate()));
+      var dayEvents=eventsByDate[dStr]||[];
+      var limit=dayEvents.length>showMax ? showMax-1 : showMax;
+      dayEvents.slice(0,limit).forEach(function(ev){
+        var color=scheduleEventColorClass(ev.title);
+        cell.appendChild(el("div","cal-chip"+(ev.allDay?" allday":"")+(ev.isContinuation?" cont":"")+(color?" "+color:""),
+          (ev.time?ev.time+" ":"")+ev.title));
+      });
+      if(dayEvents.length>limit) cell.appendChild(el("div","cal-more","+"+(dayEvents.length-limit)+"件"));
+
+      cell.addEventListener("click", (function(dStr){
+        return function(){ selectedDayStr=dStr; renderCalendar(); };
+      })(dStr));
+      grid.appendChild(cell);
+    }
+    renderDayPanel();
+  }
+
+  // 右側パネル: 週間カレンダ → 今日の予定(時間軸) → この日が期限のタスク
+  function renderDayPanel(){
+    renderWeek();
+    var d=new Date(selectedDayStr+"T00:00:00");
+    var isToday=selectedDayStr===todayStr();
+    document.getElementById("dayTitle").textContent=isToday ? "📌 今日の予定" : "📌 "+(d.getMonth()+1)+"/"+d.getDate()+"("+DOW_NAMES[d.getDay()]+")の予定";
+    var list=document.getElementById("dayList");
+    clearChildren(list);
+    var evs=eventsByDate[selectedDayStr]||[];
+    document.getElementById("daySub").textContent=evs.length ? evs.length+"件" : "";
+
+    if(!store.schedule){
+      list.appendChild(el("div","empty","スケジュールが未読込です。\n右上の「読込」から schedule.mw を選んでください。"));
+      list.lastChild.style.whiteSpace="pre-line";
+    }else if(!evs.length){
+      list.appendChild(el("div","empty","予定はありません"));
+    }else{
+      renderTimeline(list, selectedDayStr, evs);
+    }
+
+    var due=document.getElementById("dueTasks");
+    clearChildren(due);
+    var dueTasks=tasks.filter(function(t){ return t.due===selectedDayStr && t.column!=="Done"; });
+    document.getElementById("dueSub").textContent=dueTasks.length ? dueTasks.length+"件" : "";
+    if(!dueTasks.length){ var n=el("div","empty","なし"); n.style.padding="6px"; n.style.fontSize="12px"; due.appendChild(n); }
+    dueTasks.forEach(function(t){ due.appendChild(renderCard(t)); });
+    updateTodayListRowStates();
+  }
+
+  var SCHED_DOT={"sched-red":"#ff4d6d","sched-cyan":"#2fe4ff","sched-yellow":"#ffd84d","sched-darkgray":"#7a8a99",
+                 "sched-green":"#4cd964","sched-purple":"#b07dff","sched-orange":"#ff9f43"};
+
+  // 選択日を含む週（日曜はじまり）の7日＋その月のミニカレンダを2列で並べる
+  function renderWeek(){
+    var grid=document.getElementById("weekGrid");
+    clearChildren(grid);
+    var sel=new Date(selectedDayStr+"T00:00:00");
+    var start=new Date(sel); start.setDate(sel.getDate()-sel.getDay());
+    var end=new Date(start); end.setDate(start.getDate()+6);
+    document.getElementById("weekSub").textContent=(start.getMonth()+1)+"/"+start.getDate()+" 〜 "+(end.getMonth()+1)+"/"+end.getDate();
+    var todayS=todayStr();
+    for(var i=0;i<7;i++){
+      var d=new Date(start); d.setDate(start.getDate()+i);
+      var ds=fmtDate(d);
+      var cell=el("div","wk-cell "+dayClasses(d, ds).join(" "));
+      if(ds===todayS) cell.classList.add("today");
+      if(ds===selectedDayStr) cell.classList.add("selected");
+      var head=el("div","wk-head");
+      head.appendChild(el("span","d",d.getDate()));
+      head.appendChild(el("span",null,DOW_NAMES[d.getDay()]));
+      cell.appendChild(head);
+      var evs=eventsByDate[ds]||[];
+      var limit=evs.length>3 ? 2 : 3;
+      evs.slice(0,limit).forEach(function(ev){
+        var row=el("div","wk-ev");
+        var dot=el("span","dot");
+        var c=SCHED_DOT[scheduleEventColorClass(ev.title)];
+        if(c) dot.style.background=c; else if(ev.allDay) dot.style.background="var(--violet)";
+        row.appendChild(dot);
+        if(ev.time) row.appendChild(el("span","tm",ev.time));
+        row.appendChild(el("span",null,ev.title));
+        cell.appendChild(row);
+      });
+      if(evs.length>limit) cell.appendChild(el("div","wk-more","+"+(evs.length-limit)+"件"));
+      cell.addEventListener("click", (function(ds){ return function(){ selectDay(ds); }; })(ds));
+      grid.appendChild(cell);
+    }
+    grid.appendChild(renderMiniMonth(sel.getFullYear(), sel.getMonth()));
+  }
+
+  function renderMiniMonth(year, month){
+    var cell=el("div","wk-cell wk-mini");
+    cell.appendChild(el("div","mini-title",year+"年"+(month+1)+"月"));
+    var g=el("div","mini-grid");
+    DOW_NAMES.forEach(function(n,i){ g.appendChild(el("span",i===0?"s":(i===6?"t":""),n)); });
+    var first=new Date(year, month, 1).getDay();
+    var days=new Date(year, month+1, 0).getDate();
+    var todayS=todayStr();
+    for(var i=0;i<first;i++) g.appendChild(el("span","o","0"));
+    for(var day=1; day<=days; day++){
+      var d=new Date(year, month, day);
+      var cls=fmtDate(d)===todayS ? "now" : (d.getDay()===0||isJapaneseHoliday(d) ? "s" : (d.getDay()===6 ? "t" : ""));
+      g.appendChild(el("span",cls,day));
+    }
+    cell.appendChild(g);
+    return cell;
+  }
+
+  // 今日の予定を時間軸で表示（終日は上にまとめる）。重なる予定は横に並べる
+  var TL_PX_PER_HOUR=48;
+  function toMin(t){ var p=t.split(":"); return (+p[0])*60+(+p[1]); }
+  function renderTimeline(list, dStr, evs){
+    var allDay=evs.filter(function(ev){ return ev.allDay || !ev.time; });
+    var timed=evs.filter(function(ev){ return !ev.allDay && ev.time; });
+    if(allDay.length){
+      var top=el("div","tl-allday");
+      allDay.forEach(function(ev){
+        var color=scheduleEventColorClass(ev.title);
+        var row=el("div","day-event allday"+(color?" "+color:""));
+        row.appendChild(el("div","day-time", ev.isContinuation?"終日（継続）":"終日"));
+        row.appendChild(el("div","day-title", ev.title));
+        top.appendChild(row);
+      });
+      list.appendChild(top);
+    }
+    if(!timed.length) return;
+
+    var items=timed.map(function(ev){
+      var s=toMin(ev.time);
+      var e=ev.endTime ? toMin(ev.endTime) : s+30;
+      if(e<=s) e=24*60; // 日をまたぐ予定はこの日の終わりまで
+      return {ev:ev, s:s, e:e};
+    }).sort(function(a,b){ return a.s-b.s || a.e-b.e; });
+    var minS=items[0].s, maxE=Math.max.apply(null, items.map(function(it){ return it.e; }));
+    var startH=Math.min(9, Math.floor(minS/60));
+    var endH=Math.min(24, Math.max(18, Math.ceil(maxE/60)));
+    var px=TL_PX_PER_HOUR/60;
+
+    // 重なりのかたまりごとにレーン（横の列）を割り当てる
+    var cluster=[], clusterEnd=-1;
+    function flush(){
+      var laneEnds=[];
+      cluster.forEach(function(it){
+        var lane=laneEnds.findIndex(function(end){ return end<=it.s; });
+        if(lane===-1){ lane=laneEnds.length; laneEnds.push(it.e); } else laneEnds[lane]=it.e;
+        it.lane=lane;
+      });
+      cluster.forEach(function(it){ it.lanes=laneEnds.length; });
+      cluster=[];
+    }
+    items.forEach(function(it){
+      if(cluster.length && it.s>=clusterEnd) flush();
+      cluster.push(it);
+      clusterEnd=cluster.length===1 ? it.e : Math.max(clusterEnd, it.e);
+    });
+    flush();
+
+    var tl=el("div","tl");
+    tl.style.height=((endH-startH)*TL_PX_PER_HOUR)+"px";
+    tl.dataset.startH=startH;
+    for(var h=startH; h<=endH; h++){
+      var line=el("div","tl-hour");
+      line.style.top=((h-startH)*TL_PX_PER_HOUR)+"px";
+      line.appendChild(el("span",null,h+":00"));
+      tl.appendChild(line);
+    }
+    items.forEach(function(it){
+      var ev=it.ev;
+      var color=scheduleEventColorClass(ev.title);
+      // 45分未満の予定は高さが足りないので「時刻 タイトル」を1行で出す
+      var b=el("div","day-event tl-ev"+(color?" "+color:"")+(it.e-it.s<45?" short":""));
+      b.dataset.start=ev.time;
+      if(ev.endTime) b.dataset.end=ev.endTime;
+      b.style.top=((it.s-startH*60)*px)+"px";
+      b.style.height=Math.max(20, (it.e-it.s)*px-2)+"px";
+      b.style.left="calc("+(it.lane*100/it.lanes)+"% + 2px)";
+      b.style.width="calc("+(100/it.lanes)+"% - 4px)";
+      b.appendChild(el("div","day-time", ev.time+"–"+(ev.endTime||"")));
+      b.appendChild(el("div","day-title", ev.title));
+      tl.appendChild(b);
+    });
+    var isToday=dStr===todayStr();
+    if(isToday) tl.appendChild(el("div","tl-now"));
+    // 時間軸は枠の中でスクロール（週間カレンダが上に残るように）。今日は現在時刻、それ以外は最初の予定の位置を開く
+    var box=el("div","tl-box");
+    box.appendChild(tl);
+    list.appendChild(box);
+    updateNowLine();
+    var now=new Date();
+    var focusMin=isToday ? now.getHours()*60+now.getMinutes()-60 : items[0].s-30;
+    box.scrollTop=Math.max(0, (focusMin-startH*60)*px);
+  }
+  function updateNowLine(){
+    var tl=document.querySelector("#dayList .tl");
+    var line=tl && tl.querySelector(".tl-now");
+    if(!line) return;
+    var now=new Date();
+    var y=(now.getHours()*60+now.getMinutes()-(+tl.dataset.startH)*60)*TL_PX_PER_HOUR/60;
+    line.style.display=(y<0 || y>tl.clientHeight) ? "none" : "";
+    line.style.top=y+"px";
+  }
+
+  // PC版と同じ判定: 開始20分前=緑(upcoming) > 次の予定=黄(next) > 時間中=赤(ongoing) > 終了=淡色(done)
+  function updateTodayListRowStates(){
+    var rows=document.querySelectorAll("#dayList .day-event");
+    var isToday=(selectedDayStr===todayStr());
+    var now=new Date();
+    var nextRow=null, nextStartMs=Infinity;
+    if(isToday){
+      rows.forEach(function(row){
+        if(!row.dataset.start) return;
+        var sp=row.dataset.start.split(":");
+        var ms=new Date(now.getFullYear(), now.getMonth(), now.getDate(), +sp[0], +sp[1]).getTime();
+        if(ms>now.getTime() && ms<nextStartMs){ nextStartMs=ms; nextRow=row; }
+      });
+    }
+    rows.forEach(function(row){
+      row.classList.remove("event-upcoming","event-ongoing","event-done","event-next");
+      if(!isToday || !row.dataset.start) return;
+      var sp=row.dataset.start.split(":");
+      var start=new Date(now.getFullYear(), now.getMonth(), now.getDate(), +sp[0], +sp[1]);
+      var end=null;
+      if(row.dataset.end){
+        var ep=row.dataset.end.split(":");
+        end=new Date(now.getFullYear(), now.getMonth(), now.getDate(), +ep[0], +ep[1]);
+      }
+      var diffStartMin=(start.getTime()-now.getTime())/60000;
+      if(diffStartMin>0 && diffStartMin<=20){
+        row.classList.add("event-upcoming");
+      }else if(row===nextRow){
+        row.classList.add("event-next");
+      }else if(now.getTime()>=start.getTime() && (!end || now.getTime()<end.getTime())){
+        row.classList.add("event-ongoing");
+      }else if(end && now.getTime()>=end.getTime()){
+        row.classList.add("event-done");
+      }
+    });
+  }
+
+  /* =====================================================================
+     流れる文字（PC版のヘッダー通知 / NEXT / AI秘書チェック）
+  ===================================================================== */
+  // "upcoming" = 20分以内に開始, "arrived" = 開始済みで終了前
+  function classifyTodayEvents(){
+    var now=new Date();
+    var todays=eventsByDate[todayStr()]||[];
+    var upcoming=[], arrived=[];
+    todays.forEach(function(ev){
+      if(ev.allDay || !ev.time) return;
+      var parts=ev.time.split(":");
+      var evTime=new Date(now.getFullYear(), now.getMonth(), now.getDate(), +parts[0], +parts[1]);
+      var diffMin=(evTime.getTime()-now.getTime())/60000;
+      if(diffMin>0 && diffMin<=20){ upcoming.push(ev); return; }
+      if(diffMin<=0 && ev.endTime){
+        var eparts=ev.endTime.split(":");
+        var endTime=new Date(now.getFullYear(), now.getMonth(), now.getDate(), +eparts[0], +eparts[1]);
+        if(now.getTime()<endTime.getTime()) arrived.push(ev);
+      }
+    });
+    return {upcoming:upcoming, arrived:arrived};
+  }
+
+  // Starts a right-to-left marquee. The same text is not restarted every 30s tick (that would cut a
+  // long message off mid-scroll); force=true re-measures, e.g. after the container was hidden/resized.
+  function startMarquee(container, track, force){
+    var key=track.textContent+"|"+track.className.replace(/\s*scrolling/,"");
+    if(!force && track.dataset.key===key && track.classList.contains("scrolling")) return;
+    track.dataset.key=key;
+    track.classList.remove("scrolling");
+    track.style.animationDuration="";
+    void track.offsetWidth; // restart the animation from the right edge
+    track.classList.add("scrolling");
+    var containerWidth=container.clientWidth;
+    var textWidth=track.scrollWidth;
+    var duration=Math.max(6, (containerWidth+textWidth)/90);
+    track.style.setProperty("--startX", containerWidth+"px");
+    track.style.setProperty("--endX", (-textWidth)+"px");
+    track.style.animationDuration=duration+"s, 1.2s";
+  }
+  function runPanelMarquee(containerId, trackId, text, force){
+    var container=document.getElementById(containerId);
+    var track=document.getElementById(trackId);
+    if(!text){ track.classList.remove("scrolling"); track.textContent=""; track.dataset.key=""; return; }
+    if(track.textContent!==text){ track.textContent=text; force=true; }
+    startMarquee(container, track, force);
+  }
+
+  function checkUpcomingEvents(force){
+    var container=document.getElementById("headerAlert");
+    var track=document.getElementById("headerAlertTrack");
+    var state=classifyTodayEvents();
+    if(state.arrived.length){
+      var atext="🔔 開始時刻です: "+state.arrived.map(function(ev){return ev.time+" "+ev.title;}).join(" / ");
+      if(track.textContent!==atext || !track.classList.contains("arrived")){
+        track.classList.remove("scrolling");
+        track.classList.add("arrived");
+        track.dataset.key="";
+        track.textContent=atext;
+        force=true;
+      }
+      if(track.classList.contains("scrolling") && !force) return;
+      track.classList.remove("scrolling");
+      if(track.scrollWidth>container.clientWidth) startMarquee(container, track, true);
+    }else if(state.upcoming.length){
+      track.classList.remove("arrived");
+      var text="⏰ もうすぐ "+state.upcoming.map(function(ev){return ev.time+" "+ev.title+" の時間です。";}).join(" / ");
+      if(track.textContent!==text){ track.textContent=text; force=true; }
+      startMarquee(container, track, force);
+    }else{
+      track.classList.remove("scrolling","arrived");
+      track.textContent=""; track.dataset.key="";
+    }
+  }
+
+  // ☞ NEXT: まだ始まっていない直近の予定。色は 今日の状態に合わせて 黄(通常)/緑(20分前)/赤(開始済み)
+  function updateScheduleNextAlert(force){
+    var now=new Date();
+    var todayS=todayStr();
+    var candidates=scheduleEvents.filter(function(ev){ return !ev.cancelled; }).map(function(ev){
+      var dt=ev.allDay ? new Date(ev.startDate+"T00:00:00") : new Date(ev.startDate+"T"+(ev.startTime||"00:00")+":00");
+      return {ev:ev, dt:dt};
+    }).filter(function(c){ return c.dt.getTime()>=now.getTime(); });
+    candidates.sort(function(a,b){ return a.dt-b.dt; });
+    var text="";
+    if(candidates.length){
+      var ev=candidates[0].ev;
+      var sd=new Date(ev.startDate+"T00:00:00");
+      var dateLabel = ev.startDate===todayS ? "" : (sd.getMonth()+1)+"/"+sd.getDate()+" ";
+      text="☞ NEXT "+dateLabel+(ev.allDay ? "終日" : ev.startTime)+" "+ev.title;
+    }
+    var state=classifyTodayEvents();
+    var track=document.getElementById("calNextAlertTrack");
+    var color=state.arrived.length ? "red" : (state.upcoming.length ? "green" : "yellow");
+    if(!track.classList.contains(color)){
+      track.classList.remove("yellow","green","red");
+      track.classList.add(color);
+      force=true;
+    }
+    runPanelMarquee("calNextAlert", "calNextAlertTrack", text, force);
+  }
+
+  // Pulls the single-line content of a section ("■予定チェック" etc.) out of the 巡回ログ text,
+  // stopping at the next section header or "---" (same rules as the PC version).
+  function extractAiMessageSection(fullText, headerMark){
+    if(!fullText) return "";
+    var lines=fullText.split(/\r?\n/);
+    var headerRe=/^[■①②③④⑤⑥⑦⑧⑨⑩]/;
+    var bare=function(s){ return s.trim().replace(/^[■\s]*[①②③④⑤⑥⑦⑧⑨⑩]?\s*/,""); };
+    var want=bare(headerMark);
+    var startIdx=-1;
+    for(var i=0;i<lines.length;i++){
+      if(headerRe.test(lines[i].trim()) || /^[^。、]{1,25}$/.test(lines[i].trim())){
+        if(bare(lines[i]).indexOf(want)===0){ startIdx=i; break; }
+      }
+    }
+    if(startIdx===-1) return "";
+    var looksLikeHeader=function(j){
+      var t=lines[j].trim();
+      return /^[^。、]{1,25}$/.test(t) && (j===0 || lines[j-1].trim()==="") && (j+1>=lines.length || lines[j+1].trim()==="");
+    };
+    var collected=[];
+    for(var j=startIdx+1;j<lines.length;j++){
+      var line=lines[j].trim();
+      if(line==="") continue;
+      if(headerRe.test(line) || line==="---" || looksLikeHeader(j)) break;
+      collected.push(line);
+    }
+    return collected.join(" ");
+  }
+  function updateAiAlerts(force){
+    var text=store.patrol ? store.patrol.text : "";
+    var s1=extractAiMessageSection(text, "予定チェック");
+    var s2=extractAiMessageSection(text, "タスク期限チェック");
+    runPanelMarquee("calSchedCheckAlert", "calSchedCheckAlertTrack", s1 ? "① "+s1 : "", force);
+    runPanelMarquee("taskCheckAlert", "taskCheckAlertTrack", s2 ? "② "+s2 : "", force);
+  }
+  function refreshMarquees(force){
+    checkUpcomingEvents(force);
+    updateScheduleNextAlert(force);
+    updateAiAlerts(force);
+  }
+
+  /* =====================================================================
+     AI秘書 (巡回ログ) VIEW
+  ===================================================================== */
+  function renderAi(){
+    var body=document.getElementById("aiBody");
+    clearChildren(body);
+    var p=store.patrol;
+    document.getElementById("aiSub").textContent=p ? p.name+(p.modifiedAt?"（更新 "+fmtStamp(p.modifiedAt)+"）":"") : "";
+    if(!p){
+      var e=el("div","empty","巡回ログが未読込です。\n右上の「読込」から 秘書\\巡回ログ の 巡回_〜.txt を選んでください。");
+      e.style.whiteSpace="pre-line"; body.appendChild(e);
+      return;
+    }
+    var first=true;
+    p.text.split(/\r?\n/).forEach(function(raw){
+      var line=raw.trim();
+      if(!line) return;
+      if(first){ body.appendChild(el("div","ai-lead",line)); first=false; return; }
+      if(/^■/.test(line) || /^[①②③④⑤⑥⑦⑧⑨⑩]/.test(line)) body.appendChild(el("div","ai-sec",line.replace(/^■\s*/,"")));
+      else body.appendChild(el("p","ai-p",line));
+    });
+  }
+
+  function shiftMonth(n){
+    calState.month+=n;
+    if(calState.month<0){ calState.month=11; calState.year--; }
+    if(calState.month>11){ calState.month=0; calState.year++; }
+    renderCalendar();
+  }
+
+  // Horizontal swipe on the month grid flips months.
+  (function(){
+    var body=document.getElementById("calBody");
+    var sx=null, sy=null;
+    body.addEventListener("touchstart", function(e){ sx=e.touches[0].clientX; sy=e.touches[0].clientY; }, {passive:true});
+    body.addEventListener("touchend", function(e){
+      if(sx==null) return;
+      var dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
+      sx=null;
+      if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5) shiftMonth(dx<0?1:-1);
+    }, {passive:true});
+  })();
+
+  /* =====================================================================
+     KANBAN
+  ===================================================================== */
+  function isOverdue(t){
+    if(!t.due || t.column==="Done") return false;
+    return new Date(t.due+"T00:00:00").getTime() < todayObj().getTime();
+  }
+  function isSoon(t){
+    if(!t.due || t.column==="Done" || isOverdue(t)) return false;
+    var diff=Math.round((new Date(t.due+"T00:00:00").getTime()-todayObj().getTime())/86400000);
+    return diff>=0 && diff<=2;
+  }
+  function sortTasks(list){
+    return list.slice().sort(function(a,b){
+      if(!a.due && !b.due) return 0;
+      if(!a.due) return 1;
+      if(!b.due) return -1;
+      return a.due<b.due?-1:(a.due>b.due?1:0);
+    });
+  }
+  function tagColor(tag){
+    var h=0; for(var i=0;i<tag.length;i++){ h=(h*31+tag.charCodeAt(i))|0; }
+    return NOTE_COLORS[Math.abs(h)%NOTE_COLORS.length];
+  }
+  function fmtShortDate(s){
+    if(!s) return "";
+    var p=s.split("-");
+    return p.length===3 ? (parseInt(p[1],10)+"/"+parseInt(p[2],10)) : s;
+  }
+
+  function renderStats(){
+    var row=document.getElementById("statRow");
+    clearChildren(row);
+    if(!store.tasks) return;
+    var todayS=todayStr();
+    var todays=tasks.filter(function(t){ return t.due===todayS; });
+    var done=todays.filter(function(t){ return t.column==="Done"; }).length;
+    var cumulative=tasks.filter(function(t){ return t.due && t.due<=todayS && t.column!=="Done"; }).length;
+    var overdue=tasks.filter(isOverdue).length;
+    row.appendChild(el("span","stat","今日 "+todays.length));
+    row.appendChild(el("span","stat","完了 "+done));
+    row.appendChild(el("span","stat","残 "+(todays.length-done)));
+    row.appendChild(el("span","stat"+(cumulative?" warn":""),"累計残 "+cumulative));
+    if(overdue) row.appendChild(el("span","stat warn","期限切れ "+overdue));
+  }
+
+  function renderKanban(){
+    renderStats();
+    var wrap=document.getElementById("kanban");
+    clearChildren(wrap);
+    if(!store.tasks){
+      var p=el("div","panel"); p.style.flex="1";
+      var e=el("div","empty","タスクが未読込です。\n右上の「読込」から taskList.md を選んでください。");
+      e.style.whiteSpace="pre-line";
+      p.appendChild(e); wrap.appendChild(p);
+      return;
+    }
+    taskColumns.forEach(function(col){
+      var colTasks=sortTasks(tasks.filter(function(t){return t.column===col;}));
+      var kcol=el("div","panel kcol");
+      var head=el("div","panel-head");
+      head.appendChild(el("h2",null,(COLUMN_ICONS[col]||"📌")+" "+col));
+      head.appendChild(el("span","kcol-count",colTasks.length));
+      kcol.appendChild(head);
+      var body=el("div","kcol-body");
+      if(!colTasks.length) body.appendChild(el("div","empty","なし"));
+      colTasks.forEach(function(t){ body.appendChild(renderCard(t)); });
+      kcol.appendChild(body);
+      wrap.appendChild(kcol);
+    });
+  }
+
+  function renderCard(t){
+    var card=el("div","kcard priority-"+(t.priority||"medium"));
+    if(isOverdue(t)) card.classList.add("overdue");
+    card.appendChild(el("div","kcard-title",t.title));
+    var meta=el("div","kcard-meta");
+    if(t.due) meta.appendChild(el("span","kbadge due"+(isOverdue(t)?" overdue":(isSoon(t)?" soon":"")),"期限 "+fmtShortDate(t.due)));
+    (t.tags||[]).slice(0,3).forEach(function(tag){ meta.appendChild(el("span","kbadge tag-"+tagColor(tag),tag)); });
+    if(t.tags && t.tags.length>3) meta.appendChild(el("span","kbadge","+"+(t.tags.length-3)));
+    if(t.workload && t.workload!=="Normal") meta.appendChild(el("span","kbadge workload",(t.workload==="Extreme"?"⚡":"🔥")+t.workload));
+    card.appendChild(meta);
+    if(t.steps && t.steps.length){
+      var done=t.steps.filter(function(s){return s.done;}).length;
+      var prog=el("div","kprog");
+      var bar=el("div","kprog-bar"); bar.style.width=Math.round(done/t.steps.length*100)+"%";
+      prog.appendChild(bar); card.appendChild(prog);
+      card.appendChild(el("div","kprog-label",done+"/"+t.steps.length+" 完了"));
+    }
+    card.addEventListener("click", function(){ openTaskSheet(t); });
+    return card;
+  }
+
+  var PRIORITY_LABEL={high:"高",medium:"中",low:"低"};
+  function openTaskSheet(t){
+    var body=document.getElementById("taskSheetBody");
+    clearChildren(body);
+    body.appendChild(el("div","sheet-grip"));
+    body.appendChild(el("h3",null,t.title));
+    var meta=el("div","kcard-meta");
+    (t.tags||[]).forEach(function(tag){ meta.appendChild(el("span","kbadge tag-"+tagColor(tag),tag)); });
+    body.appendChild(meta);
+    var kv=el("dl","kv");
+    function add(k,v){ if(!v) return; kv.appendChild(el("dt",null,k)); kv.appendChild(el("dd",null,v)); }
+    add("列", t.column);
+    add("優先度", PRIORITY_LABEL[t.priority]||t.priority);
+    add("負荷", t.workload);
+    add("開始", t.start);
+    add("期限", t.due ? t.due+(isOverdue(t)?"（期限切れ）":"") : "");
+    body.appendChild(kv);
+    if(t.steps && t.steps.length){
+      var ul=el("ul","steps");
+      t.steps.forEach(function(s){
+        var li=el("li",s.done?"done":"");
+        li.appendChild(el("span",null,s.done?"☑":"☐"));
+        li.appendChild(el("span",null,s.text));
+        ul.appendChild(li);
+      });
+      body.appendChild(ul);
+    }
+    if(t.description) body.appendChild(el("div","desc",t.description));
+    var act=el("div","sheet-actions");
+    var close=el("button","hbtn","閉じる");
+    close.addEventListener("click", function(){ closeOverlay("taskSheet"); });
+    act.appendChild(close); body.appendChild(act);
+    openOverlay("taskSheet");
+  }
+
+  /* =====================================================================
+     ROADMAP (タブレットでは日付付きリスト表示)
+  ===================================================================== */
+  var rmHideDone=lsGet(LS_PREFIX+"rmHideDone")==="1";
+  var rmFolded={};
+  try{ rmFolded=JSON.parse(lsGet(LS_PREFIX+"rmFolded")||"{}")||{}; }catch(e){ rmFolded={}; }
+
+  function rmKey(r){ return (r.sectionParts||[]).join("/")+"//"+(r.groupName||""); }
+  function fmtRange(it){
+    return it.milestone ? fmtShortDate(it.start) : fmtShortDate(it.start)+" – "+fmtShortDate(it.end);
+  }
+
+  function renderRoadmap(){
+    var list=document.getElementById("rmList");
+    clearChildren(list);
+    document.getElementById("rmHideDone").classList.toggle("on", rmHideDone);
+    document.getElementById("roadTitle").textContent="🗺 "+(store.roadmap ? store.roadmap.name.replace(/\.mw$/,"") : "ロードマップ");
+    if(!store.roadmap){
+      var e=el("div","empty","ロードマップが未読込です。\n右上の「読込」からロードマップの .mw を選んでください。");
+      e.style.whiteSpace="pre-line"; list.appendChild(e);
+      return;
+    }
+    var todayS=todayStr();
+    var lastSec=null;
+    roadmapRows.forEach(function(r){
+      // 「完了を隠す」は【完】【延】【不要】をまとめて隠す
+      var items=r.items.filter(function(it){ return !(rmHideDone && it.status); });
+      if(!items.length) return;
+      var sec=(r.sectionParts||[]).join(" › ");
+      if(sec && sec!==lastSec){ list.appendChild(el("div","rm-sec",sec)); lastSec=sec; }
+
+      var key=rmKey(r);
+      var grp=el("div","rm-group"+(rmFolded[key]?" folded":""));
+      var head=el("div","rm-group-head");
+      head.appendChild(el("span","caret",rmFolded[key]?"▸":"▾"));
+      head.appendChild(el("span",null,r.groupName||"（グループなし）"));
+      var activeCnt=items.filter(function(it){ return !it.status && it.start<=todayS && it.end>=todayS; }).length;
+      head.appendChild(el("span","cnt",items.length+"件"+(activeCnt?"・進行中 "+activeCnt:"")));
+      head.addEventListener("click", function(){
+        rmFolded[key]=!rmFolded[key];
+        if(!rmFolded[key]) delete rmFolded[key];
+        lsSet(LS_PREFIX+"rmFolded", JSON.stringify(rmFolded));
+        renderRoadmap();
+      });
+      grp.appendChild(head);
+
+      var wrap=el("div","rm-items");
+      items.forEach(function(it){
+        var cls="rm-item";
+        if(it.status) cls+=" st-"+it.status;
+        else if(it.start<=todayS && it.end>=todayS) cls+=" active";
+        else if(it.end<todayS) cls+=" late";
+        var row=el("div",cls);
+        row.appendChild(el("span","rm-dot"+(it.milestone?" milestone":"")));
+        row.appendChild(el("span","rm-dates",fmtRange(it)));
+        row.appendChild(el("span","rm-title",it.title));
+        wrap.appendChild(row);
+      });
+      grp.appendChild(wrap);
+      list.appendChild(grp);
+    });
+  }
+
+  document.getElementById("rmHideDone").addEventListener("click", function(){
+    rmHideDone=!rmHideDone;
+    lsSet(LS_PREFIX+"rmHideDone", rmHideDone?"1":"0");
+    renderRoadmap();
+  });
+  document.getElementById("rmFoldAll").addEventListener("click", function(){
+    var anyOpen=roadmapRows.some(function(r){ return !rmFolded[rmKey(r)]; });
+    rmFolded={};
+    if(anyOpen) roadmapRows.forEach(function(r){ rmFolded[rmKey(r)]=true; });
+    lsSet(LS_PREFIX+"rmFolded", JSON.stringify(rmFolded));
+    this.textContent=anyOpen?"すべて展開":"すべて折りたたむ";
+    renderRoadmap();
+  });
+
+  /* =====================================================================
+     SHELL: tabs / overlays / header buttons
+  ===================================================================== */
+  var currentView=lsGet(LS_PREFIX+"view")||"viewCal";
+  function showView(id){
+    if(id==="viewRoad") id="viewTask"; // ロードマップはタスク画面に統合した
+    if(!document.getElementById(id)) id="viewCal";
+    currentView=id;
+    lsSet(LS_PREFIX+"view", id);
+    document.querySelectorAll(".view").forEach(function(v){ v.classList.toggle("active", v.id===id); });
+    document.querySelectorAll(".tab").forEach(function(t){ t.classList.toggle("active", t.dataset.view===id); });
+    if(id==="viewCal") renderCalendar(); // cell height (chip count) depends on the view being visible
+    refreshMarquees(true); // marquee widths can only be measured while the view is visible
+  }
+  document.querySelectorAll(".tab").forEach(function(t){
+    t.addEventListener("click", function(){ showView(t.dataset.view); });
+  });
+
+  function openOverlay(id){ document.getElementById(id).classList.add("open"); }
+  function closeOverlay(id){ document.getElementById(id).classList.remove("open"); }
+  document.querySelectorAll(".overlay").forEach(function(o){
+    o.addEventListener("click", function(e){ if(e.target===o) closeOverlay(o.id); });
+  });
+
+  document.getElementById("loadBtn").addEventListener("click", function(){ renderLoadRows(); openOverlay("loadSheet"); });
+  document.getElementById("loadClose").addEventListener("click", function(){ closeOverlay("loadSheet"); });
+  document.getElementById("loadPick").addEventListener("click", function(){ document.getElementById("fileInput").click(); });
+  document.getElementById("fileInput").addEventListener("change", function(e){
+    var files=e.target.files;
+    handleFiles(files).then(function(){ e.target.value=""; });
+  });
+
+  document.getElementById("calPrev").addEventListener("click", function(){ shiftMonth(-1); });
+  document.getElementById("calNext").addEventListener("click", function(){ shiftMonth(1); });
+  document.getElementById("calToday").addEventListener("click", function(){
+    var d=new Date(); calState={year:d.getFullYear(), month:d.getMonth()}; selectedDayStr=todayStr(); renderCalendar();
+  });
+
+  document.getElementById("fsBtn").addEventListener("click", function(){
+    if(document.fullscreenElement){ document.exitFullscreen(); }
+    else if(document.documentElement.requestFullscreen){ document.documentElement.requestFullscreen().catch(function(){ showToast("全画面にできませんでした"); }); }
+  });
+
+  // Keeps the screen on while the board is shown (handy when the tablet sits on a stand).
+  var wakeLock=null, wakeWanted=false;
+  async function acquireWake(){
+    try{ wakeLock=await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", function(){ wakeLock=null; }); }
+    catch(e){ wakeWanted=false; showToast("常時点灯を有効にできませんでした"); }
+    document.getElementById("wakeBtn").classList.toggle("on", wakeWanted);
+  }
+  document.getElementById("wakeBtn").addEventListener("click", function(){
+    if(!("wakeLock" in navigator)){ showToast("このブラウザは常時点灯に対応していません"); return; }
+    wakeWanted=!wakeWanted;
+    if(wakeWanted){ acquireWake(); }
+    else{ if(wakeLock) wakeLock.release(); this.classList.remove("on"); }
+  });
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState==="visible"){
+      if(wakeWanted && !wakeLock) acquireWake();
+      tick(true);
+    }
+  });
+
+  /* =====================================================================
+     THEME: 1.標準 / 5.アクティブ① / 6.アクティブ②
+  ===================================================================== */
+  // background/img 直下の画像を埋め込んだもの（タブレットでは相対パスの画像を読めないため）。
+  // 画像を差し替えたらここを作り直すこと。順序はPC版の BG_IMAGES と同じ。
+  var BG_IMAGES=[/*BG_IMAGES*/];
+  var bgLayers=[document.getElementById("bgLayerA"), document.getElementById("bgLayerB")];
+  // 表示する背景画像の一覧。タブレットで選んだ画像があればそれを、なければ埋め込み画像（BG_IMAGES）を使う。
+  // アプリ版は BG_IMAGES が空なので、選んだ画像だけになる。
+  var bgList=BG_IMAGES.slice();
+  var bgUserCount=0;
+  var bgActive=0, bgTimer=null, bgRunning=false;
+  var bgIndex=parseInt(lsGet(LS_PREFIX+"bgIndex"),10)||0;
+  if(bgIndex<0 || bgIndex>=bgList.length) bgIndex=0;
+  var bgLocked=lsGet(LS_PREFIX+"bgLocked")==="1";
+  function showBackground(i){
+    if(!bgList.length) return;
+    bgIndex=(i+bgList.length)%bgList.length;
+    lsSet(LS_PREFIX+"bgIndex", String(bgIndex));
+    var next=bgLayers[1-bgActive];
+    next.style.backgroundImage="url('"+bgList[bgIndex]+"')";
+    next.classList.add("show");
+    bgLayers[bgActive].classList.remove("show");
+    bgActive=1-bgActive;
+  }
+  // 15秒ごとの自動切替。ロック中は止める
+  function restartBgTimer(){
+    clearInterval(bgTimer); bgTimer=null;
+    if(bgRunning && !bgLocked && bgList.length>1) bgTimer=setInterval(function(){ showBackground(bgIndex+1); }, 15*1000);
+  }
+  function startBackground(){
+    bgRunning=true;
+    if(bgList.length && !bgLayers[bgActive].style.backgroundImage){
+      bgLayers[bgActive].style.backgroundImage="url('"+bgList[bgIndex]+"')";
+      bgLayers[bgActive].classList.add("show");
+    }
+    restartBgTimer();
+  }
+  function stopBackground(){ bgRunning=false; restartBgTimer(); }
+  // 画像の一覧が変わったとき: 表示中の背景を消して、最初の1枚から出し直す
+  function resetBackground(){
+    bgLayers.forEach(function(l){ l.style.backgroundImage=""; l.classList.remove("show"); });
+    bgActive=0;
+    if(bgIndex>=bgList.length) bgIndex=0;
+    if(bgRunning) startBackground();
+    updateBgInfo();
+  }
+  function updateBgInfo(){
+    var info=document.getElementById("bgInfo");
+    info.textContent=bgUserCount ? "選んだ画像 "+bgUserCount+"枚（タブレット内に保存）"
+      : (BG_IMAGES.length ? "埋め込みの画像 "+BG_IMAGES.length+"枚" : "画像なし —「画像を選ぶ」から設定できます");
+    document.getElementById("bgClearBtn").disabled=!bgUserCount;
+  }
+
+  /* ---- 選んだ背景画像の保存（IndexedDB: このタブレットのこのページの中だけ。ネットには送らない） ---- */
+  var BG_DB="skbt_bg_images", BG_STORE="images", BG_MAX_EDGE=2048;
+  function bgDb(){
+    return new Promise(function(resolve, reject){
+      var req=indexedDB.open(BG_DB, 1);
+      req.onupgradeneeded=function(){ req.result.createObjectStore(BG_STORE, {autoIncrement:true}); };
+      req.onsuccess=function(){ resolve(req.result); };
+      req.onerror=function(){ reject(req.error); };
+    });
+  }
+  function bgDbAll(){
+    return bgDb().then(function(db){
+      return new Promise(function(resolve, reject){
+        var req=db.transaction(BG_STORE,"readonly").objectStore(BG_STORE).getAll();
+        req.onsuccess=function(){ resolve(req.result||[]); };
+        req.onerror=function(){ reject(req.error); };
+      });
+    });
+  }
+  function bgDbReplace(blobs){
+    return bgDb().then(function(db){
+      return new Promise(function(resolve, reject){
+        var tx=db.transaction(BG_STORE,"readwrite");
+        var st=tx.objectStore(BG_STORE);
+        st.clear();
+        blobs.forEach(function(b){ st.add(b); });
+        tx.oncomplete=function(){ resolve(); };
+        tx.onerror=function(){ reject(tx.error); };
+      });
+    });
+  }
+  // 大きな写真は長い辺 2048px の JPEG に縮めて保存する（保存容量と表示の重さを抑えるため）
+  async function shrinkImage(file){
+    try{
+      var bmp=await createImageBitmap(file);
+      var scale=Math.min(1, BG_MAX_EDGE/Math.max(bmp.width, bmp.height));
+      if(scale>=1 && file.size<1500000){ bmp.close && bmp.close(); return file; }
+      var c=document.createElement("canvas");
+      c.width=Math.round(bmp.width*scale); c.height=Math.round(bmp.height*scale);
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      bmp.close && bmp.close();
+      return await new Promise(function(resolve){ c.toBlob(function(b){ resolve(b||file); }, "image/jpeg", 0.85); });
+    }catch(e){ return file; } // 読めない形式はそのまま保存（表示できなければ背景に出ないだけ）
+  }
+  function useUserBlobs(blobs){
+    bgList.forEach(function(u){ if(u.indexOf("blob:")===0) URL.revokeObjectURL(u); });
+    bgUserCount=blobs.length;
+    bgList=blobs.length ? blobs.map(function(b){ return URL.createObjectURL(b); }) : BG_IMAGES.slice();
+    resetBackground();
+  }
+  bgDbAll().then(function(blobs){ if(blobs.length) useUserBlobs(blobs); else updateBgInfo(); }).catch(function(){ updateBgInfo(); });
+
+  document.getElementById("bgPickBtn").addEventListener("click", function(){ document.getElementById("bgFileInput").click(); });
+  document.getElementById("bgFileInput").addEventListener("change", async function(e){
+    var files=Array.prototype.slice.call(e.target.files||[]).filter(function(f){ return /^image\//.test(f.type) || /\.(jpe?g|png|webp|avif|gif)$/i.test(f.name); });
+    e.target.value="";
+    if(!files.length) return;
+    showToast("背景画像を保存しています…");
+    var blobs=[];
+    for(var i=0;i<files.length;i++) blobs.push(await shrinkImage(files[i]));
+    try{
+      await bgDbReplace(blobs);
+    }catch(err){
+      showToast("画像を保存できませんでした（容量不足の可能性があります）");
+      return;
+    }
+    bgIndex=0;
+    useUserBlobs(blobs);
+    showToast("背景画像を"+blobs.length+"枚設定しました");
+  });
+  document.getElementById("bgClearBtn").addEventListener("click", async function(){
+    if(!bgUserCount) return;
+    if(!confirm("選んだ背景画像（"+bgUserCount+"枚）をこのタブレットから消しますか？")) return;
+    try{ await bgDbReplace([]); }catch(err){ showToast("消せませんでした"); return; }
+    bgIndex=0;
+    useUserBlobs([]);
+    showToast("選んだ背景画像を消しました");
+  });
+  function updateBgLockBtn(){
+    var b=document.getElementById("bgLockBtn");
+    b.textContent=bgLocked ? "🔒 ロック中" : "🔓 ロック";
+    b.classList.toggle("on", bgLocked);
+  }
+  document.getElementById("bgPrevBtn").addEventListener("click", function(){ showBackground(bgIndex-1); restartBgTimer(); });
+  document.getElementById("bgNextBtn").addEventListener("click", function(){ showBackground(bgIndex+1); restartBgTimer(); });
+  document.getElementById("bgLockBtn").addEventListener("click", function(){
+    bgLocked=!bgLocked;
+    lsSet(LS_PREFIX+"bgLocked", bgLocked?"1":"0");
+    updateBgLockBtn();
+    restartBgTimer();
+    showToast(bgLocked ? "背景を固定しました" : "背景の自動切替を再開しました");
+  });
+  updateBgLockBtn();
+
+  var rainBuilt=false;
+  // Decorative "code rain" from the PC version's アクティブ① theme.
+  function buildCodeRain(){
+    if(rainBuilt) return;
+    rainBuilt=true;
+    function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function kw(w){ return '<span class="mm-tok-kw">'+esc(w)+'</span>'; }
+    function fn(w){ return '<span class="mm-tok-fn">'+esc(w)+'</span>'; }
+    function str(w){ return '<span class="mm-tok-str">'+esc(w)+'</span>'; }
+    function type(w){ return '<span class="mm-tok-type">'+esc(w)+'</span>'; }
+    function va(w){ return '<span class="mm-tok-var">'+esc(w)+'</span>'; }
+    function cmt(w){ return '<span class="mm-tok-cmt">'+esc(w)+'</span>'; }
+    function pn(w){ return '<span class="mm-tok-pn">'+esc(w)+'</span>'; }
+    var lines=[
+      function(){ return kw("function")+" "+fn("renderBoard")+"("+va("tasks")+") {"; },
+      function(){ return "  "+kw("const")+" "+va("sorted")+" = "+va("tasks")+"."+fn("sort")+"(("+va("a")+","+va("b")+") "+pn("=>")+" "+va("a")+"."+va("order")+");"; },
+      function(){ return "  "+kw("if")+" ("+va("status")+" === "+str('"done"')+") {"; },
+      function(){ return "    "+fn("moveCard")+"("+va("id")+", "+str('"完了"')+");"; },
+      function(){ return "  }"; },
+      function(){ return "  "+kw("return")+" "+va("sorted")+"."+fn("map")+"("+va("t")+" "+pn("=>")+" "+va("t")+"."+va("id")+");"; },
+      function(){ return "}"; },
+      function(){ return ""; },
+      function(){ return kw("class")+" "+type("KanbanCard")+" "+kw("extends")+" "+type("Component")+" {"; },
+      function(){ return "  "+va("schedule")+" = [];"; },
+      function(){ return "  "+fn("onClick")+" = { "+fn("handleMove")+" };"; },
+      function(){ return "}"; },
+      function(){ return ""; },
+      function(){ return kw("export")+" "+kw("default")+" "+fn("App")+";"; },
+      function(){ return kw("const")+" ["+va("state")+", "+va("setState")+"] = "+fn("useState")+"("+kw("null")+");"; },
+      function(){ return kw("await")+" "+fn("fetch")+"("+str('"/api/tools"')+");"; },
+      function(){ return cmt("// スケジュール・タスクボードを更新"); },
+      function(){ return va("card")+"."+va("style")+"."+va("background")+" = "+str('"#161c23"')+";"; },
+      function(){ return kw("type")+" "+type("Tool")+" = { "+va("id")+": "+type("string")+" };"; },
+      function(){ return pn("$")+" npm run build"; },
+      function(){ return pn("$")+" git commit -m "+str('"fix: sync board"'); }
+    ];
+    function buildBlock(count){
+      var html="";
+      for(var j=0;j<count;j++){ html+=lines[Math.floor(Math.random()*lines.length)]()+"\n"; }
+      return html;
+    }
+    ["mmRainText1","mmRainText2","mmRainText3"].forEach(function(id){
+      var block=buildBlock(90);
+      document.getElementById(id).innerHTML=block+block;
+    });
+  }
+  // The glow follows the finger instead of the mouse.
+  document.addEventListener("pointerdown", function(e){
+    document.documentElement.style.setProperty("--mmx", (e.clientX/window.innerWidth*100)+"%");
+    document.documentElement.style.setProperty("--mmy", (e.clientY/window.innerHeight*100)+"%");
+  }, {passive:true});
+
+  function applyTheme(theme){
+    if(theme){ document.documentElement.dataset.theme=theme; }
+    else{ delete document.documentElement.dataset.theme; }
+    document.querySelectorAll(".theme-menu-item").forEach(function(item){
+      item.classList.toggle("active", item.dataset.theme===theme);
+    });
+    // 5.アクティブ① = PC版と同じ（画像なし）/ 6.アクティブ② = ①＋背景画像
+    if(theme==="active1" || theme==="active2") buildCodeRain();
+    if(theme==="active2") startBackground(); else stopBackground();
+  }
+  (function(){
+    var btn=document.getElementById("themeBtn"), menu=document.getElementById("themeMenu");
+    btn.addEventListener("click", function(e){ e.stopPropagation(); menu.classList.toggle("open"); });
+    menu.addEventListener("click", function(e){ e.stopPropagation(); }); // 背景ボタンを押してもメニューを閉じない
+    menu.querySelectorAll(".theme-menu-item").forEach(function(item){
+      item.addEventListener("click", function(){
+        applyTheme(item.dataset.theme);
+        lsSet(LS_PREFIX+"theme", item.dataset.theme);
+        if(item.dataset.theme==="active2" && !bgList.length){
+          showToast("背景画像は 着せ替えメニューの「🖼 画像を選ぶ」から設定できます");
+          return; // メニューを開いたままにして、すぐ選べるようにする
+        }
+        menu.classList.remove("open");
+      });
+    });
+    document.addEventListener("click", function(){ menu.classList.remove("open"); });
+    applyTheme(lsGet(LS_PREFIX+"theme")||"");
+  })();
+
+  /* =====================================================================
+     RENDER + CLOCK
+  ===================================================================== */
+  function updateTodayBadge(){
+    var d=new Date();
+    document.getElementById("todayBadge").textContent=d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate()+"("+DOW_NAMES[d.getDay()]+") "+timeStr(d)+":"+pad(d.getSeconds());
+  }
+  setInterval(updateTodayBadge, 1000);
+  function renderAll(){
+    updateTodayBadge();
+    renderCalendar();
+    renderKanban();
+    renderRoadmap();
+    renderAi();
+    refreshMarquees(true);
+  }
+
+  var lastDay=todayStr();
+  function tick(force){
+    updateTodayBadge();
+    var t=todayStr();
+    if(t!==lastDay){
+      // Date rolled over: follow "today" if the user was looking at it.
+      if(selectedDayStr===lastDay){ selectedDayStr=t; var d=new Date(); calState={year:d.getFullYear(), month:d.getMonth()}; }
+      lastDay=t; renderAll();
+      return;
+    }
+    updateTodayListRowStates();
+    updateNowLine();
+    refreshMarquees(force);
+  }
+  setInterval(tick, 30000); // PC版と同じ30秒ごと
+
+  /* =====================================================================
+     COMPACT MODE: 今日の予定だけ。フローティングウィンドウ/分割画面で小さくすると自動で切替。
+     PCのChromeではボタンで縦長の小窓（#compact）を開く
+  ===================================================================== */
+  var IS_POPUP=location.hash==="#compact";
+  var compactManual=IS_POPUP || lsGet(LS_PREFIX+"compact")==="1";
+  var compactForcedFull=false; // 小さいウィンドウで「全体表示」を選んだとき
+  // タブレット（タッチ操作）では小窓を開けないので、ページ内の切替にする
+  function isDesktop(){
+    return !/Android|iPhone|iPad/i.test(navigator.userAgent) && !(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+  }
+  function isSmallWindow(){ return window.innerWidth<560 || window.innerHeight<460; }
+  function isCompact(){ return compactManual || (isSmallWindow() && !compactForcedFull); }
+  function applyCompact(){
+    var on=isCompact();
+    var was=document.documentElement.classList.contains("compact");
+    document.documentElement.classList.toggle("compact", on);
+    var btn=document.getElementById("compactBtn");
+    btn.classList.toggle("on", on);
+    btn.title=on ? "全体表示に戻す" : "コンパクト表示（今日の予定だけ）";
+    btn.firstChild.textContent=on ? "⤢" : "▭";
+    btn.querySelector(".lbl").textContent=on ? " 全体" : " コンパクト";
+    if(on && !was){
+      selectedDayStr=todayStr();
+      var d=new Date(); calState={year:d.getFullYear(), month:d.getMonth()};
+      renderDayPanel();
+    }
+    if(!on && was) showView(currentView);
+    else refreshMarquees(true);
+  }
+  document.getElementById("compactBtn").addEventListener("click", function(){
+    if(IS_POPUP){ window.close(); return; } // 小窓の「全体」= 小窓を閉じて元の画面へ
+    if(!isCompact() && isDesktop()){
+      var w=window.open(location.href.split("#")[0]+"#compact", "skbtCompact", "popup=yes,width=420,height=760");
+      if(w){ w.focus(); return; }
+      // ポップアップがブロックされたときはページ内で切り替える
+    }
+    if(isCompact()){
+      compactManual=false;
+      if(isSmallWindow()) compactForcedFull=true;
+    }else{
+      compactManual=true; compactForcedFull=false;
+    }
+    lsSet(LS_PREFIX+"compact", compactManual?"1":"0");
+    applyCompact();
+  });
+
+  // 別ウィンドウ（小窓）で読込・着せ替えをしたら、こちらにも反映する
+  window.addEventListener("storage", function(e){
+    if(!e.key || e.key.indexOf(LS_PREFIX)!==0) return;
+    var k=e.key.slice(LS_PREFIX.length);
+    if(KINDS[k]){
+      try{ store[k]=e.newValue ? JSON.parse(e.newValue) : undefined; }catch(err){ return; }
+      if(!store[k]) delete store[k];
+      applyStore(); renderAll();
+    }else if(k==="theme"){
+      applyTheme(e.newValue||"");
+    }
+  });
+
+  var resizeTimer=null;
+  window.addEventListener("resize", function(){
+    clearTimeout(resizeTimer);
+    resizeTimer=setTimeout(function(){
+      if(!isSmallWindow()) compactForcedFull=false;
+      applyCompact();
+      if(currentView==="viewCal" && !isCompact()) renderCalendar();
+    }, 150);
+  });
+
+  // アプリ版（https で公開）だけ: インストールできるように sw.js を登録する。ファイルを直接開いたときは何もしない
+  if("serviceWorker" in navigator && location.protocol==="https:"){
+    navigator.serviceWorker.register("sw.js").catch(function(){});
+  }
+
+  renderDowRow();
+  applyStore();
+  showView(currentView);
+  renderAll();
+  applyCompact();
+  if(!Object.keys(store).length) setTimeout(function(){ renderLoadRows(); openOverlay("loadSheet"); }, 300);
+})();
+</script>
+</body>
+</html>

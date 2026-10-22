@@ -1,0 +1,17 @@
+{
+  "name": "スケジュール&タスク統合ボード",
+  "short_name": "スケジュール",
+  "description": "スケジュールカンバンボードのタブレット版（閲覧専用）",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#040810",
+  "theme_color": "#040810",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
