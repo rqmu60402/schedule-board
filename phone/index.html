@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#040810">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>スケジュール&タスク（スマホ版）</title>
+<style>
+  /* タブレット版（アプリ版）の「標準」配色をそのまま使う */
+  :root{
+    --navy-950:#040810;
+    --cyan:#2fe4ff;
+    --cyan-soft:#34d399;
+    --cyan-dim:#0f7d95;
+    --violet:#8a7dff;
+    --amber:#ffb454;
+    --mint:#3dffc0;
+    --danger:#ff4d6d;
+    --text:#e4f6ff;
+    --text-dim:#89aec4;
+    --accent-rgb:47,228,255;
+    --panel-rgb:11,26,48;
+    --bg-mid-rgb:8,16,30;
+    --border:rgba(90,225,255,0.28);
+    --panel:rgba(var(--panel-rgb),0.62);
+    --panel-solid:rgba(var(--panel-rgb),0.96);
+    --tabbar-h:58px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;color:var(--text);
+    font-family:'Noto Sans JP','Hiragino Sans','Yu Gothic UI',sans-serif;
+    background:radial-gradient(ellipse at 80% 110%, #0d2a4a 0%, transparent 55%),
+               radial-gradient(ellipse at 0% 0%, #0a1d38 0%, transparent 50%), var(--navy-950);}
+  button{font-family:inherit;color:inherit;}
+  ::-webkit-scrollbar{width:4px;height:4px;}
+  ::-webkit-scrollbar-thumb{background:var(--cyan-dim);border-radius:4px;}
+
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);}
+
+  /* ---------- HEADER ---------- */
+  header{display:flex;align-items:center;gap:8px;padding:8px 10px;
+    background:linear-gradient(180deg, rgba(4,9,18,0.96), rgba(4,9,18,0.8));
+    border-bottom:1px solid var(--border);flex-shrink:0;}
+  .hdr-title{flex:1;min-width:0;display:flex;align-items:center;gap:4px;}
+  .hdr-title h1{margin:0;font-size:17px;font-weight:600;color:var(--cyan-soft);white-space:nowrap;}
+  .hdr-title .sub{font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hbtn{min-width:40px;height:40px;padding:0 10px;border-radius:10px;border:1px solid var(--border);background:rgba(var(--accent-rgb),0.08);
+    font-size:14px;display:inline-flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+  .hbtn:active{background:rgba(var(--accent-rgb),0.25);}
+  .hbtn.primary{border-color:var(--cyan);color:var(--cyan-soft);box-shadow:0 0 10px rgba(var(--accent-rgb),0.25);}
+  .hbtn.nav{min-width:36px;padding:0;font-size:20px;}
+  .hdr-cal,.hdr-task{display:none;align-items:center;gap:6px;flex:1;min-width:0;}
+  html[data-view="cal"] .hdr-cal,html[data-view="task"] .hdr-task{display:flex;}
+
+  /* ---------- VIEWS ---------- */
+  main{flex:1;min-height:0;position:relative;}
+  .view{position:absolute;inset:0;display:none;flex-direction:column;}
+  .view.active{display:flex;}
+  .empty{color:var(--text-dim);font-size:14px;text-align:center;padding:24px 8px;white-space:pre-line;}
+
+  /* ---------- CALENDAR ---------- */
+  .cal-wrap{flex-shrink:0;padding:6px 6px 4px;touch-action:pan-y;}
+  .cal-dow-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;margin-bottom:3px;}
+  .cal-dow{text-align:center;font-size:11.5px;color:var(--text-dim);}
+  .cal-dow.sun{color:#ff8fa3;} .cal-dow.sat{color:#7cc4ff;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;}
+  .cal-cell{height:var(--cell-h,56px);min-width:0;background:linear-gradient(155deg, rgba(30,55,90,0.5) 0%, rgba(var(--bg-mid-rgb),0.35) 100%);
+    border:1px solid var(--border);border-radius:6px;padding:2px;display:flex;flex-direction:column;gap:1px;overflow:hidden;cursor:pointer;}
+  .cal-cell.sat{background:linear-gradient(155deg, rgba(60,140,255,0.26) 0%, rgba(var(--bg-mid-rgb),0.4) 100%);}
+  .cal-cell.sun,.cal-cell.kyu{background:linear-gradient(155deg, rgba(255,90,120,0.24) 0%, rgba(var(--bg-mid-rgb),0.4) 100%);}
+  .cal-cell.other-month{opacity:0.32;}
+  .cal-cell.today{border-color:var(--cyan);box-shadow:0 0 8px rgba(var(--accent-rgb),0.45), inset 0 0 6px rgba(var(--accent-rgb),0.15);}
+  .cal-cell.selected{border-color:var(--amber);box-shadow:0 0 0 2px rgba(255,180,84,0.6);}
+  .cal-date{font-size:12px;font-weight:600;line-height:1.15;padding-left:1px;}
+  .cal-cell.today .cal-date{color:var(--cyan-soft);}
+  .cal-cell.sun .cal-date,.cal-cell.kyu .cal-date,.cal-cell.jph .cal-date{color:#ff8fa3;}
+  .cal-cell.sat .cal-date{color:#7cc4ff;}
+  .cal-chip{font-size:9.5px;line-height:1.35;padding:0 2px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:clip;
+    background:rgba(var(--accent-rgb),0.14);border-left:2px solid var(--cyan);}
+  .cal-chip.allday{background:rgba(138,125,255,0.22);border-left-color:var(--violet);}
+  .cal-chip.cont{opacity:0.7;}
+  .cal-more{font-size:9px;color:var(--text-dim);padding-left:2px;line-height:1.2;}
+  .sched-red{border-left-color:#ff4d6d !important;background:rgba(255,77,109,0.2) !important;}
+  .sched-cyan{border-left-color:#2fe4ff !important;background:rgba(47,228,255,0.2) !important;}
+  .sched-yellow{border-left-color:#ffd84d !important;background:rgba(255,216,77,0.18) !important;}
+  .sched-darkgray{border-left-color:#7a8a99 !important;background:rgba(122,138,153,0.2) !important;}
+  .sched-green{border-left-color:#4cd964 !important;background:rgba(76,217,100,0.18) !important;}
+  .sched-purple{border-left-color:#b07dff !important;background:rgba(176,125,255,0.2) !important;}
+  .sched-orange{border-left-color:#ff9f43 !important;background:rgba(255,159,67,0.2) !important;}
+
+  /* 下半分: 選んだ日の予定 → この日が期限のタスク */
+  .day-scroll{flex:1;min-height:0;overflow-y:auto;padding:4px 10px 16px;border-top:1px solid var(--border);}
+  .sec-h{display:flex;align-items:baseline;gap:8px;margin:10px 2px 6px;}
+  .sec-h h2,.sec-h .ttl{margin:0;font-size:15px;font-weight:600;}
+  .sec-h .sub{font-size:12px;color:var(--text-dim);}
+  .day-list,.due-tasks{display:flex;flex-direction:column;gap:6px;}
+  .day-event{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border-radius:9px;border:1px solid var(--border);
+    border-left:4px solid var(--cyan);background:rgba(var(--accent-rgb),0.08);}
+  .day-event.allday{border-left-color:var(--violet);background:rgba(138,125,255,0.12);}
+  .day-time{font-size:13px;color:var(--cyan-soft);font-variant-numeric:tabular-nums;width:86px;flex-shrink:0;line-height:1.5;}
+  .day-title{font-size:15px;line-height:1.45;word-break:break-word;min-width:0;}
+  /* 今日の予定の状態（PC版と同じ判定）: 次=黄 / 開始20分前=緑 / 時間中=赤 で点滅発光 */
+  .day-event.event-next{animation:eventGlowYellow 2.4s ease-in-out infinite;}
+  .day-event.event-upcoming{animation:eventGlowGreen 2.4s ease-in-out infinite;}
+  .day-event.event-ongoing{animation:eventGlowRed 2.4s ease-in-out infinite;}
+  .day-event.event-done{opacity:0.45;}
+  @keyframes eventGlowYellow{
+    0%,100%{ box-shadow:0 0 2px rgba(255,216,77,0.25), inset 0 0 0 999px rgba(255,216,77,0.04); border-color:rgba(255,216,77,0.45); }
+    50%{ box-shadow:0 0 14px rgba(255,216,77,0.95), inset 0 0 0 999px rgba(255,216,77,0.2); border-color:rgba(255,216,77,1); }
+  }
+  @keyframes eventGlowGreen{
+    0%,100%{ box-shadow:0 0 2px rgba(76,217,100,0.25), inset 0 0 0 999px rgba(76,217,100,0.04); border-color:rgba(76,217,100,0.45); }
+    50%{ box-shadow:0 0 14px rgba(76,217,100,0.95), inset 0 0 0 999px rgba(76,217,100,0.2); border-color:rgba(76,217,100,1); }
+  }
+  @keyframes eventGlowRed{
+    0%,100%{ box-shadow:0 0 2px rgba(255,77,109,0.25), inset 0 0 0 999px rgba(255,77,109,0.04); border-color:rgba(255,77,109,0.45); }
+    50%{ box-shadow:0 0 14px rgba(255,77,109,0.95), inset 0 0 0 999px rgba(255,77,109,0.2); border-color:rgba(255,77,109,1); }
+  }
+
+  /* ---------- TASK LIST ---------- */
+  .stat-row{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px 0;flex-shrink:0;}
+  .stat{font-size:12.5px;padding:3px 10px;border-radius:14px;border:1px solid var(--border);background:var(--panel);}
+  .stat.warn{color:#ffc2cd;border-color:rgba(255,77,109,0.5);}
+  .col-tabs{display:flex;gap:6px;overflow-x:auto;padding:8px 10px;flex-shrink:0;scrollbar-width:none;}
+  .col-tabs::-webkit-scrollbar{display:none;}
+  .col-tab{flex-shrink:0;height:36px;padding:0 12px;border-radius:18px;border:1px solid var(--border);background:rgba(var(--accent-rgb),0.06);
+    font-size:13.5px;color:var(--text-dim);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;}
+  .col-tab .n{font-size:11.5px;padding:0 7px;border-radius:10px;background:rgba(var(--accent-rgb),0.15);color:var(--cyan-soft);}
+  .col-tab.on{background:rgba(var(--accent-rgb),0.25);color:var(--cyan-soft);border-color:var(--cyan);font-weight:600;}
+  .task-list{flex:1;min-height:0;overflow-y:auto;padding:2px 10px 16px;display:flex;flex-direction:column;gap:8px;touch-action:pan-y;}
+  .kcard{background:linear-gradient(140deg, rgba(var(--accent-rgb),0.14) 0%, rgba(var(--panel-rgb),0.94) 62%);border:1px solid var(--border);
+    border-left:3px solid var(--cyan);border-radius:8px;padding:9px 11px;cursor:pointer;flex-shrink:0;}
+  .kcard:active{transform:scale(0.98);}
+  .kcard.priority-high{border-left-color:var(--amber);background:linear-gradient(140deg, rgba(255,180,84,0.18) 0%, rgba(var(--panel-rgb),0.94) 62%);}
+  .kcard.priority-low{border-left-color:var(--text-dim);background:linear-gradient(140deg, rgba(137,174,196,0.12) 0%, rgba(var(--panel-rgb),0.94) 62%);}
+  .kcard.overdue{border-color:rgba(255,77,109,0.55);box-shadow:0 0 10px rgba(255,77,109,0.35);}
+  .kcard-title{font-size:14.5px;line-height:1.45;margin-bottom:5px;word-break:break-word;}
+  .kcard-meta{display:flex;flex-wrap:wrap;gap:4px;}
+  .kbadge{font-size:11.5px;padding:1px 7px;border-radius:9px;border:1px solid var(--border);color:var(--text-dim);white-space:nowrap;}
+  .sheet .kbadge{font-size:12.5px;padding:2px 8px;}
+  .kbadge.due{color:var(--text);}
+  .kbadge.due.overdue{color:#ffc2cd;border-color:rgba(255,77,109,0.5);background:rgba(255,77,109,0.12);}
+  .kbadge.due.soon{color:var(--amber);border-color:rgba(255,180,84,0.5);background:rgba(255,180,84,0.1);}
+  .kbadge.tag-cyan{color:var(--cyan-soft);border-color:rgba(var(--accent-rgb),0.4);}
+  .kbadge.tag-violet{color:var(--violet);border-color:rgba(138,125,255,0.4);}
+  .kbadge.tag-amber{color:var(--amber);border-color:rgba(255,180,84,0.4);}
+  .kbadge.tag-mint{color:var(--mint);border-color:rgba(61,255,192,0.4);}
+  .kbadge.workload{color:var(--danger);border-color:rgba(255,77,109,0.4);}
+  .kprog{margin-top:6px;height:4px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;}
+  .kprog-bar{height:100%;background:linear-gradient(90deg,var(--cyan-dim),var(--cyan));}
+  .kprog-label{font-size:11px;color:var(--text-dim);margin-top:2px;}
+
+  /* ---------- TAB BAR ---------- */
+  nav.tabbar{flex-shrink:0;display:flex;height:calc(var(--tabbar-h) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);
+    background:rgba(4,9,18,0.96);border-top:1px solid var(--border);}
+  .tab{flex:1;border:none;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    font-size:12px;color:var(--text-dim);cursor:pointer;position:relative;}
+  .tab .ico{font-size:21px;line-height:1;}
+  .tab.active{color:var(--cyan-soft);}
+  .tab.active::before{content:"";position:absolute;top:0;left:30%;right:30%;height:3px;border-radius:0 0 3px 3px;background:var(--cyan);box-shadow:0 0 10px var(--cyan);}
+
+  /* ---------- SHEET (task detail / load) ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:flex-end;justify-content:center;z-index:100;}
+  .overlay.open{display:flex;}
+  .sheet{width:100%;max-height:85vh;overflow-y:auto;background:var(--panel-solid);border:1px solid var(--border);border-bottom:none;
+    border-radius:16px 16px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,0.5);}
+  .sheet h3{margin:0 0 10px;font-size:18px;line-height:1.4;word-break:break-word;}
+  .sheet-grip{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,0.25);margin:-4px auto 12px;}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px;margin:10px 0;}
+  .kv dt{color:var(--text-dim);}
+  .kv dd{margin:0;}
+  .steps{list-style:none;padding:0;margin:10px 0;}
+  .steps li{padding:7px 0;font-size:14.5px;border-bottom:1px solid rgba(90,225,255,0.12);display:flex;gap:10px;}
+  .steps li.done{color:var(--text-dim);text-decoration:line-through;}
+  .desc{white-space:pre-wrap;font-size:14px;line-height:1.6;background:rgba(0,0,0,0.25);border-radius:8px;padding:10px;margin-top:10px;word-break:break-word;}
+  .sheet-actions{display:flex;justify-content:flex-end;margin-top:14px;gap:10px;}
+  .load-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(90,225,255,0.12);}
+  .load-row .name{font-size:14.5px;flex:1;}
+  .load-row .st{font-size:12.5px;color:var(--text-dim);text-align:right;white-space:pre-line;}
+  .load-row .st.ok{color:#4cd964;}
+  .hint{font-size:12.5px;color:var(--text-dim);line-height:1.6;margin-top:12px;}
+
+  .toast{position:fixed;left:50%;bottom:calc(var(--tabbar-h) + 20px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
+    background:var(--panel-solid);border:1px solid var(--cyan);color:var(--cyan-soft);padding:10px 16px;border-radius:10px;font-size:13.5px;
+    transition:opacity .25s, transform .25s;z-index:200;width:max-content;max-width:90vw;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <!-- カレンダ表示のときは月の切替、タスク表示のときは読込状況を出す -->
+    <div class="hdr-cal">
+      <button class="hbtn nav" id="calPrev">‹</button>
+      <div class="hdr-title"><h1 id="calTitle"></h1></div>
+      <button class="hbtn nav" id="calNext">›</button>
+      <button class="hbtn" id="calToday">今日</button>
+    </div>
+    <div class="hdr-task">
+      <div class="hdr-title" style="flex-direction:column;align-items:flex-start;gap:0;">
+        <h1>📋 タスク</h1>
+        <span class="sub" id="loadedInfo">データ未読込</span>
+      </div>
+    </div>
+    <button class="hbtn primary" id="loadBtn" title="読込">📂</button>
+  </header>
+
+  <main>
+    <!-- ============ カレンダ表示 ============ -->
+    <section class="view" id="viewCal">
+      <div class="cal-wrap" id="calBody">
+        <div class="cal-dow-row" id="calDowRow"></div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+      <div class="day-scroll" id="dayScroll">
+        <div class="sec-h"><h2 id="dayTitle"></h2><span class="sub" id="daySub"></span></div>
+        <div class="day-list" id="dayList"></div>
+        <div class="sec-h" style="margin-top:14px;"><span class="ttl">✅ この日が期限のタスク</span><span class="sub" id="dueSub"></span></div>
+        <div class="due-tasks" id="dueTasks"></div>
+      </div>
+    </section>
+
+    <!-- ============ タスクリスト表示 ============ -->
+    <section class="view" id="viewTask">
+      <div class="stat-row" id="statRow"></div>
+      <div class="col-tabs" id="colTabs"></div>
+      <div class="task-list" id="taskList"></div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab" data-view="viewCal"><span class="ico">📅</span>カレンダ</button>
+    <button class="tab" data-view="viewTask"><span class="ico">📋</span>タスク</button>
+  </nav>
+</div>
+
+<!-- task detail sheet -->
+<div class="overlay" id="taskSheet"><div class="sheet" id="taskSheetBody"></div></div>
+
+<!-- load sheet -->
+<div class="overlay" id="loadSheet">
+  <div class="sheet">
+    <div class="sheet-grip"></div>
+    <h3>データの読み込み</h3>
+    <div id="loadRows"></div>
+    <div class="sheet-actions">
+      <button class="hbtn" id="loadClose">閉じる</button>
+      <button class="hbtn primary" id="loadPick">📂 ファイルを選ぶ</button>
+    </div>
+    <p class="hint">
+      PCの <b>schedule.mw</b>・<b>taskList.md</b> を Googleドライブなどに置き、ここから選んでください。2つまとめて選択できます。<br>
+      ファイルの種類は自動で判別します。読み込んだ内容はスマホに保存されるので、次回は開くだけで表示されます。<br>
+      ※スマホ版は閲覧専用です。編集はPC版で行ってください。
+    </p>
+  </div>
+</div>
+<input type="file" id="fileInput" multiple accept=".mw,.md,.txt,text/plain,text/markdown,*/*" style="display:none">
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =====================================================================
+     UTILITIES
+  ===================================================================== */
+  function pad(n){ return n < 10 ? "0"+n : ""+n; }
+  function fmtDate(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function todayObj(){ var d=new Date(); d.setHours(0,0,0,0); return d; }
+  function todayStr(){ return fmtDate(new Date()); }
+  function timeStr(d){ d=d||new Date(); return pad(d.getHours())+":"+pad(d.getMinutes()); }
+  function uid(){ return "n"+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+  function clearChildren(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+  function el(tag, cls, text){
+    var e=document.createElement(tag);
+    if(cls) e.className=cls;
+    if(text!=null) e.textContent=text;
+    return e;
+  }
+  var toastTimer=null;
+  function showToast(msg){
+    var t=document.getElementById("toast");
+    t.textContent=msg; t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(function(){ t.classList.remove("show"); }, 2600);
+  }
+  function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function lsSet(k, v){ try{ localStorage.setItem(k, v); return true; }catch(e){ return false; } }
+
+  var MONTH_NAMES=["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+  var DOW_NAMES=["日","月","火","水","木","金","土"];
+  var COLUMN_ICONS={"To Do":"📋","Backlog":"🗂","In Progress":"⚙️","urgent tasks":"🔥","Done":"✅"};
+  var NOTE_COLORS=["cyan","violet","amber","mint"];
+
+  // Horizontal swipe on an element: calls fn(+1) for a right-to-left swipe, fn(-1) for left-to-right.
+  function onSwipe(target, fn){
+    var sx=null, sy=null;
+    target.addEventListener("touchstart", function(e){ sx=e.touches[0].clientX; sy=e.touches[0].clientY; }, {passive:true});
+    target.addEventListener("touchend", function(e){
+      if(sx==null) return;
+      var dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
+      sx=null;
+      if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5) fn(dx<0?1:-1);
+    }, {passive:true});
+  }
+
+  /* =====================================================================
+     PARSERS (PC版・タブレット版と同じロジック)
+  ===================================================================== */
+  function dateRange(startStr, endStr){
+    var out=[];
+    var d=new Date(startStr+"T00:00:00");
+    var end=new Date(endStr+"T00:00:00");
+    var guard=0;
+    while(d.getTime() <= end.getTime() && guard < 400){
+      out.push(fmtDate(d));
+      d.setDate(d.getDate()+1);
+      guard++;
+    }
+    return out;
+  }
+
+  function parseScheduleMW(text){
+    var events=[];
+    var lines=(text||"").split(/\r?\n/);
+    var reTimed=/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}):\s*(.*)$/;
+    var reSpan=/^(\d{4}-\d{2}-\d{2})\s*\/\s*(\d+)\s*days?:\s*(.*)$/;
+    var reAllDay=/^(\d{4}-\d{2}-\d{2}):\s*(.*)$/;
+    lines.forEach(function(raw){
+      var line=raw.trim();
+      if(!line) return;
+      if(/^title\s*:/i.test(line)) return;
+      var cancelled=false;
+      if(line.charAt(0)==="×"){ cancelled=true; line=line.slice(1); }
+      var m;
+      if((m=line.match(reTimed))){
+        events.push({id:uid(), startDate:m[1], startTime:m[2], endDate:m[3], endTime:m[4], title:m[5].trim(), allDay:false, cancelled:cancelled});
+      }else if((m=line.match(reSpan))){
+        var days=parseInt(m[2],10)||1;
+        var start=new Date(m[1]+"T00:00:00");
+        var end=new Date(start); end.setDate(end.getDate()+days-1);
+        events.push({id:uid(), startDate:m[1], startTime:"", endDate:fmtDate(end), endTime:"", title:m[3].trim(), allDay:true, cancelled:cancelled});
+      }else if((m=line.match(reAllDay))){
+        events.push({id:uid(), startDate:m[1], startTime:"", endDate:m[1], endTime:"", title:m[2].trim(), allDay:true, cancelled:cancelled});
+      }
+    });
+    return events;
+  }
+
+  function buildEventsByDate(events){
+    var map={};
+    events.forEach(function(ev){
+      if(ev.cancelled) return;
+      var days=dateRange(ev.startDate, ev.endDate);
+      days.forEach(function(dateStr, i){
+        map[dateStr]=map[dateStr]||[];
+        map[dateStr].push({
+          title:ev.title,
+          time:ev.allDay?"":ev.startTime,
+          endTime:ev.allDay?"":ev.endTime,
+          allDay:ev.allDay,
+          isContinuation:i>0
+        });
+      });
+    });
+    Object.keys(map).forEach(function(k){
+      map[k].sort(function(a,b){
+        if(a.allDay!==b.allDay) return a.allDay?-1:1;
+        return (a.time||"").localeCompare(b.time||"");
+      });
+    });
+    return map;
+  }
+
+  function parseTaskList(text){
+    var lines=(text||"").split(/\r?\n/);
+    var columns=[];
+    var tasks=[];
+    var curColumn=null, curTask=null, mode=null, descLines=[];
+
+    for(var i=0;i<lines.length;i++){
+      var line=lines[i];
+      var trimmed=line.trim();
+
+      if(/^##\s+/.test(line) && !/^###/.test(line)){
+        if(mode==="desc" && curTask){ curTask.description=descLines.join("\n").trim(); }
+        curColumn=trimmed.replace(/^##\s+/,"").trim();
+        if(columns.indexOf(curColumn)===-1) columns.push(curColumn);
+        curTask=null; mode=null; descLines=[];
+        continue;
+      }
+      if(/^###\s+/.test(line)){
+        if(mode==="desc" && curTask){ curTask.description=descLines.join("\n").trim(); }
+        curTask={
+          id:uid(), title:trimmed.replace(/^###\s+/,"").trim(), column:curColumn||"To Do",
+          tags:[], priority:"medium", workload:"Normal", start:"", due:"",
+          steps:[], description:""
+        };
+        tasks.push(curTask);
+        mode=null; descLines=[];
+        continue;
+      }
+      if(!curTask) continue;
+
+      if(mode==="desc"){
+        if(/^\s*```\s*$/.test(line)){
+          curTask.description=descLines.join("\n").trim();
+          mode=null; descLines=[];
+        }else{
+          descLines.push(line.replace(/^ {4}/,""));
+        }
+        continue;
+      }
+
+      var mm;
+      if((mm=trimmed.match(/^-\s*id:\s*(.+)$/))){ curTask.id=mm[1].trim(); continue; }
+      if((mm=trimmed.match(/^-\s*tags:\s*\[(.*)\]$/))){ curTask.tags=mm[1].split(",").map(function(s){return s.trim();}).filter(Boolean); continue; }
+      if((mm=trimmed.match(/^-\s*priority:\s*(.+)$/))){ curTask.priority=mm[1].trim(); continue; }
+      if((mm=trimmed.match(/^-\s*workload:\s*(.+)$/))){ curTask.workload=mm[1].trim(); continue; }
+      if((mm=trimmed.match(/^-\s*start:\s*(.+)$/))){ curTask.start=mm[1].trim(); continue; }
+      if((mm=trimmed.match(/^-\s*due:\s*(.+)$/))){ curTask.due=mm[1].trim(); continue; }
+      if(/^-\s*defaultExpanded:/.test(trimmed)) continue;
+      if(/^-\s*steps:\s*$/.test(trimmed)){ mode="steps"; continue; }
+      if(mode==="steps"){
+        var sm=trimmed.match(/^-\s*\[( |x)\]\s*(.*)$/);
+        if(sm){ curTask.steps.push({done:sm[1]==="x", text:sm[2]}); continue; }
+        mode=null;
+      }
+      if(/^```md\s*$/.test(trimmed)){ mode="desc"; descLines=[]; continue; }
+    }
+    if(mode==="desc" && curTask){ curTask.description=descLines.join("\n").trim(); }
+
+    if(columns.length===0) columns=["To Do","Backlog","In Progress","urgent tasks","Done"];
+    return {columns:columns, tasks:tasks};
+  }
+
+  /* =====================================================================
+     STATE + PERSISTENCE (読み込んだファイル本文をスマホ内に保存)
+     タブレット版と同じ場所で公開しても混ざらないよう、保存名の頭を変えている
+  ===================================================================== */
+  var LS_PREFIX="skbs_";
+  var KINDS={
+    schedule:{label:"スケジュール (schedule.mw)"},
+    tasks:{label:"タスク (taskList.md)"}
+  };
+  var store={}; // kind -> {text, name, loadedAt, modifiedAt}
+  Object.keys(KINDS).forEach(function(k){
+    var raw=lsGet(LS_PREFIX+k);
+    if(raw){ try{ store[k]=JSON.parse(raw); }catch(e){} }
+  });
+
+  var scheduleEvents=[], eventsByDate={};
+  var taskColumns=[], tasks=[];
+
+  function applyStore(){
+    scheduleEvents=store.schedule ? parseScheduleMW(store.schedule.text) : [];
+    eventsByDate=buildEventsByDate(scheduleEvents);
+    var p=store.tasks ? parseTaskList(store.tasks.text) : {columns:[], tasks:[]};
+    taskColumns=p.columns; tasks=p.tasks;
+    updateLoadedInfo();
+  }
+
+  // スマホ版は schedule と tasks だけ。ロードマップ(.mw の section/group)と巡回ログは読まない
+  function detectKind(name, text){
+    var lower=(name||"").toLowerCase();
+    if(/\.txt$/.test(lower) && /巡回/.test(name)) return null;
+    if(/\.md$/.test(lower) || /^##\s+/m.test(text) && /^###\s+/m.test(text)) return "tasks";
+    if(/schedule/.test(lower)) return "schedule";
+    if(/^\s*(section|group)\s+/im.test(text)) return null;
+    if(/^\s*×?\d{4}-\d{2}-\d{2}/m.test(text)) return "schedule";
+    return null;
+  }
+
+  function readFile(file){
+    return new Promise(function(resolve){
+      var r=new FileReader();
+      r.onload=function(){ resolve(String(r.result||"")); };
+      r.onerror=function(){ resolve(null); };
+      r.readAsText(file, "utf-8");
+    });
+  }
+
+  async function handleFiles(fileList){
+    var files=Array.prototype.slice.call(fileList||[]);
+    if(!files.length) return;
+    var loaded=[], skipped=[];
+    for(var i=0;i<files.length;i++){
+      var f=files[i];
+      var text=await readFile(f);
+      var kind=text==null ? null : detectKind(f.name, text);
+      if(!kind){ skipped.push(f.name); continue; }
+      store[kind]={text:text, name:f.name, loadedAt:Date.now(), modifiedAt:f.lastModified||null};
+      lsSet(LS_PREFIX+kind, JSON.stringify(store[kind]));
+      loaded.push(f.name);
+    }
+    applyStore();
+    renderAll();
+    renderLoadRows();
+    if(loaded.length) showToast(loaded.join("、")+" を読み込みました");
+    if(skipped.length) setTimeout(function(){ showToast("スマホ版で使わないファイル: "+skipped.join("、")); }, loaded.length?2800:0);
+  }
+
+  function fmtStamp(ms){
+    if(!ms) return "";
+    var d=new Date(ms);
+    return (d.getMonth()+1)+"/"+d.getDate()+" "+timeStr(d);
+  }
+  function updateLoadedInfo(){
+    var stamps=Object.keys(store).map(function(k){ return store[k] && store[k].loadedAt; }).filter(Boolean);
+    document.getElementById("loadedInfo").textContent=stamps.length ? "最終読込 "+fmtStamp(Math.max.apply(null, stamps)) : "データ未読込 — 右上の📂から";
+  }
+  function renderLoadRows(){
+    var wrap=document.getElementById("loadRows");
+    clearChildren(wrap);
+    Object.keys(KINDS).forEach(function(k){
+      var row=el("div","load-row");
+      row.appendChild(el("div","name",KINDS[k].label));
+      var s=store[k];
+      row.appendChild(el("div","st"+(s?" ok":""), s ? ("✓ "+s.name+"\n読込 "+fmtStamp(s.loadedAt)+(s.modifiedAt?"／更新 "+fmtStamp(s.modifiedAt):"")) : "未読込"));
+      wrap.appendChild(row);
+    });
+  }
+
+  /* =====================================================================
+     カレンダ表示: 上=月カレンダ / 下=選んだ日の予定と期限のタスク
+  ===================================================================== */
+  var calState={year:new Date().getFullYear(), month:new Date().getMonth()};
+  var selectedDayStr=todayStr();
+
+  function sameYMD(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+  function nthMondayOfMonth(year, month, n){
+    var d=new Date(year, month, 1);
+    var firstMonday=1 + ((8 - d.getDay()) % 7);
+    return new Date(year, month, firstMonday + (n-1)*7);
+  }
+  function equinoxDay(year, spring){
+    var base=spring?20.8431:23.2488;
+    var day=Math.floor(base + 0.242194*(year-1980) - Math.floor((year-1980)/4));
+    return new Date(year, spring?2:8, day);
+  }
+  function isJapaneseHoliday(d){
+    var y=d.getFullYear(), md=(d.getMonth()+1)+"-"+d.getDate();
+    var fixed=["1-1","2-11","2-23","4-29","5-3","5-4","5-5","8-11","11-3","11-23"];
+    if(fixed.indexOf(md)!==-1) return true;
+    if(sameYMD(d, nthMondayOfMonth(y,0,2))) return true;
+    if(sameYMD(d, nthMondayOfMonth(y,6,3))) return true;
+    if(sameYMD(d, nthMondayOfMonth(y,8,3))) return true;
+    if(sameYMD(d, nthMondayOfMonth(y,9,2))) return true;
+    if(sameYMD(d, equinoxDay(y,true))) return true;
+    if(sameYMD(d, equinoxDay(y,false))) return true;
+    return false;
+  }
+
+  function scheduleEventColorClass(title){
+    title=title||"";
+    if(title.indexOf("営業会議")!==-1) return "sched-red";
+    if(title.indexOf("(営業)")!==-1) return "sched-red";
+    if(title.indexOf("事業部会")!==-1 || title.indexOf("課長会")!==-1) return "sched-cyan";
+    if(title.indexOf("部会")!==-1 || title.indexOf("課会")!==-1) return "sched-yellow";
+    if(title.indexOf("社内朝会")!==-1 || title.indexOf("社内昼会")!==-1 || title.indexOf("社内夕会")!==-1) return "sched-darkgray";
+    if(title.indexOf("面談")!==-1) return "sched-green";
+    if(title.indexOf("検討会")!==-1) return "sched-purple";
+    if(title.indexOf("[研]")!==-1) return "sched-red";
+    if(title.indexOf("[移]")!==-1) return "sched-orange";
+    if(title.indexOf("[会]")!==-1) return "sched-red";
+    return "";
+  }
+
+  function renderDowRow(){
+    var row=document.getElementById("calDowRow");
+    clearChildren(row);
+    DOW_NAMES.forEach(function(name,i){
+      row.appendChild(el("div","cal-dow"+(i===0?" sun":(i===6?" sat":"")), name));
+    });
+  }
+
+  // 曜日の色分け: 土=sat(青) / 日=sun(赤) / [休]のある日=kyu(赤) / 祝日=jph(日付の数字だけ赤)
+  function dayClasses(date, dStr){
+    var c=[];
+    if(date.getDay()===0) c.push("sun");
+    if(date.getDay()===6) c.push("sat");
+    if(isJapaneseHoliday(date)) c.push("jph");
+    if((eventsByDate[dStr]||[]).some(function(ev){ return (ev.title||"").indexOf("[休]")!==-1; })) c.push("kyu");
+    return c;
+  }
+
+  function selectDay(dStr){
+    selectedDayStr=dStr;
+    var d=new Date(dStr+"T00:00:00");
+    calState={year:d.getFullYear(), month:d.getMonth()};
+    renderCalendar();
+  }
+
+  // The month grid takes about 45% of the screen; the selected day's list scrolls below it.
+  function cellHeight(rows){
+    var avail=document.querySelector("main").clientHeight*0.47 - 22;
+    return Math.max(48, Math.min(76, Math.floor(avail/rows) - 3));
+  }
+
+  function renderCalendar(){
+    document.getElementById("calTitle").textContent=calState.year+"年"+MONTH_NAMES[calState.month];
+    var grid=document.getElementById("calGrid");
+    clearChildren(grid);
+
+    var firstOfMonth=new Date(calState.year, calState.month, 1);
+    var startOffset=firstOfMonth.getDay();
+    var gridStart=new Date(calState.year, calState.month, 1-startOffset);
+    var todayS=todayStr();
+    var daysInMonth=new Date(calState.year, calState.month+1, 0).getDate();
+    var rowsNeeded=Math.ceil((startOffset+daysInMonth)/7);
+    var h=cellHeight(rowsNeeded);
+    grid.style.setProperty("--cell-h", h+"px");
+    var showMax=Math.max(1, Math.min(4, Math.floor((h-16)/14))); // 日付16px + 1件14px
+
+    for(var i=0;i<rowsNeeded*7;i++){
+      var cellDate=new Date(gridStart); cellDate.setDate(gridStart.getDate()+i);
+      var dStr=fmtDate(cellDate);
+      var cell=el("div","cal-cell "+dayClasses(cellDate, dStr).join(" "));
+      if(cellDate.getMonth()!==calState.month) cell.classList.add("other-month");
+      if(dStr===todayS) cell.classList.add("today");
+      if(dStr===selectedDayStr) cell.classList.add("selected");
+
+      cell.appendChild(el("div","cal-date",cellDate.getDate()));
+      var dayEvents=eventsByDate[dStr]||[];
+      var limit=dayEvents.length>showMax ? showMax-1 : showMax;
+      dayEvents.slice(0,limit).forEach(function(ev){
+        var color=scheduleEventColorClass(ev.title);
+        // セルが狭いので時刻は出さずタイトルだけ（時刻は下の一覧で見る）
+        cell.appendChild(el("div","cal-chip"+(ev.allDay?" allday":"")+(ev.isContinuation?" cont":"")+(color?" "+color:""), ev.title));
+      });
+      if(dayEvents.length>limit) cell.appendChild(el("div","cal-more","+"+(dayEvents.length-limit)));
+
+      cell.addEventListener("click", (function(dStr){
+        return function(){ selectDay(dStr); };
+      })(dStr));
+      grid.appendChild(cell);
+    }
+    renderDayPanel();
+  }
+
+  function renderDayPanel(){
+    var d=new Date(selectedDayStr+"T00:00:00");
+    var isToday=selectedDayStr===todayStr();
+    document.getElementById("dayTitle").textContent="📌 "+(d.getMonth()+1)+"/"+d.getDate()+"("+DOW_NAMES[d.getDay()]+")"+(isToday?" 今日":"")+"の予定";
+    var list=document.getElementById("dayList");
+    clearChildren(list);
+    var evs=eventsByDate[selectedDayStr]||[];
+    document.getElementById("daySub").textContent=evs.length ? evs.length+"件" : "";
+
+    if(!store.schedule){
+      list.appendChild(el("div","empty","スケジュールが未読込です。\n右上の📂から schedule.mw を選んでください。"));
+    }else if(!evs.length){
+      list.appendChild(el("div","empty","予定はありません"));
+    }else{
+      evs.forEach(function(ev){
+        var color=scheduleEventColorClass(ev.title);
+        var row=el("div","day-event"+(ev.allDay?" allday":"")+(color?" "+color:""));
+        if(ev.allDay || !ev.time){
+          row.appendChild(el("div","day-time", ev.isContinuation?"終日（継続）":"終日"));
+        }else{
+          row.dataset.start=ev.time;
+          if(ev.endTime) row.dataset.end=ev.endTime;
+          row.appendChild(el("div","day-time", ev.time+"–"+(ev.endTime||"")));
+        }
+        row.appendChild(el("div","day-title", ev.title));
+        list.appendChild(row);
+      });
+    }
+
+    var due=document.getElementById("dueTasks");
+    clearChildren(due);
+    var dueTasks=tasks.filter(function(t){ return t.due===selectedDayStr && t.column!=="Done"; });
+    document.getElementById("dueSub").textContent=dueTasks.length ? dueTasks.length+"件" : "";
+    if(!dueTasks.length){ var n=el("div","empty","なし"); n.style.padding="6px"; n.style.fontSize="12.5px"; due.appendChild(n); }
+    dueTasks.forEach(function(t){ due.appendChild(renderCard(t)); });
+    updateTodayListRowStates();
+    document.getElementById("dayScroll").scrollTop=0;
+  }
+
+  // PC版と同じ判定: 開始20分前=緑(upcoming) > 次の予定=黄(next) > 時間中=赤(ongoing) > 終了=淡色(done)
+  function updateTodayListRowStates(){
+    var rows=document.querySelectorAll("#dayList .day-event");
+    var isToday=(selectedDayStr===todayStr());
+    var now=new Date();
+    var nextRow=null, nextStartMs=Infinity;
+    if(isToday){
+      rows.forEach(function(row){
+        if(!row.dataset.start) return;
+        var sp=row.dataset.start.split(":");
+        var ms=new Date(now.getFullYear(), now.getMonth(), now.getDate(), +sp[0], +sp[1]).getTime();
+        if(ms>now.getTime() && ms<nextStartMs){ nextStartMs=ms; nextRow=row; }
+      });
+    }
+    rows.forEach(function(row){
+      row.classList.remove("event-upcoming","event-ongoing","event-done","event-next");
+      if(!isToday || !row.dataset.start) return;
+      var sp=row.dataset.start.split(":");
+      var start=new Date(now.getFullYear(), now.getMonth(), now.getDate(), +sp[0], +sp[1]);
+      var end=null;
+      if(row.dataset.end){
+        var ep=row.dataset.end.split(":");
+        end=new Date(now.getFullYear(), now.getMonth(), now.getDate(), +ep[0], +ep[1]);
+      }
+      var diffStartMin=(start.getTime()-now.getTime())/60000;
+      if(diffStartMin>0 && diffStartMin<=20){
+        row.classList.add("event-upcoming");
+      }else if(row===nextRow){
+        row.classList.add("event-next");
+      }else if(now.getTime()>=start.getTime() && (!end || now.getTime()<end.getTime())){
+        row.classList.add("event-ongoing");
+      }else if(end && now.getTime()>=end.getTime()){
+        row.classList.add("event-done");
+      }
+    });
+  }
+
+  function shiftMonth(n){
+    calState.month+=n;
+    if(calState.month<0){ calState.month=11; calState.year--; }
+    if(calState.month>11){ calState.month=0; calState.year++; }
+    renderCalendar();
+  }
+  onSwipe(document.getElementById("calBody"), shiftMonth);
+
+  /* =====================================================================
+     タスクリスト表示: 列をタブで切り替えて1列ぶんを縦に並べる
+  ===================================================================== */
+  function isOverdue(t){
+    if(!t.due || t.column==="Done") return false;
+    return new Date(t.due+"T00:00:00").getTime() < todayObj().getTime();
+  }
+  function isSoon(t){
+    if(!t.due || t.column==="Done" || isOverdue(t)) return false;
+    var diff=Math.round((new Date(t.due+"T00:00:00").getTime()-todayObj().getTime())/86400000);
+    return diff>=0 && diff<=2;
+  }
+  function sortTasks(list){
+    return list.slice().sort(function(a,b){
+      if(!a.due && !b.due) return 0;
+      if(!a.due) return 1;
+      if(!b.due) return -1;
+      return a.due<b.due?-1:(a.due>b.due?1:0);
+    });
+  }
+  function tagColor(tag){
+    var h=0; for(var i=0;i<tag.length;i++){ h=(h*31+tag.charCodeAt(i))|0; }
+    return NOTE_COLORS[Math.abs(h)%NOTE_COLORS.length];
+  }
+  function fmtShortDate(s){
+    if(!s) return "";
+    var p=s.split("-");
+    return p.length===3 ? (parseInt(p[1],10)+"/"+parseInt(p[2],10)) : s;
+  }
+
+  function renderStats(){
+    var row=document.getElementById("statRow");
+    clearChildren(row);
+    if(!store.tasks) return;
+    var todayS=todayStr();
+    var todays=tasks.filter(function(t){ return t.due===todayS; });
+    var done=todays.filter(function(t){ return t.column==="Done"; }).length;
+    var cumulative=tasks.filter(function(t){ return t.due && t.due<=todayS && t.column!=="Done"; }).length;
+    var overdue=tasks.filter(isOverdue).length;
+    row.appendChild(el("span","stat","今日 "+todays.length));
+    row.appendChild(el("span","stat","完了 "+done));
+    row.appendChild(el("span","stat","残 "+(todays.length-done)));
+    row.appendChild(el("span","stat"+(cumulative?" warn":""),"累計残 "+cumulative));
+    if(overdue) row.appendChild(el("span","stat warn","期限切れ "+overdue));
+  }
+
+  var currentColumn=lsGet(LS_PREFIX+"column")||"";
+  function selectColumn(col){
+    currentColumn=col;
+    lsSet(LS_PREFIX+"column", col);
+    renderTasks();
+    var on=document.querySelector("#colTabs .col-tab.on");
+    if(on) on.scrollIntoView({block:"nearest", inline:"center"});
+    document.getElementById("taskList").scrollTop=0;
+  }
+  onSwipe(document.getElementById("taskList"), function(n){
+    var i=taskColumns.indexOf(currentColumn)+n;
+    if(i>=0 && i<taskColumns.length) selectColumn(taskColumns[i]);
+  });
+
+  function renderTasks(){
+    renderStats();
+    var tabs=document.getElementById("colTabs");
+    var list=document.getElementById("taskList");
+    clearChildren(tabs);
+    clearChildren(list);
+    if(!store.tasks){
+      list.appendChild(el("div","empty","タスクが未読込です。\n右上の📂から taskList.md を選んでください。"));
+      return;
+    }
+    if(taskColumns.indexOf(currentColumn)===-1){
+      // 初回は「In Progress」、なければ先頭の列
+      currentColumn=taskColumns.indexOf("In Progress")!==-1 ? "In Progress" : taskColumns[0];
+    }
+    taskColumns.forEach(function(col){
+      var n=tasks.filter(function(t){ return t.column===col; }).length;
+      var b=el("button","col-tab"+(col===currentColumn?" on":""));
+      b.appendChild(el("span",null,(COLUMN_ICONS[col]||"📌")+" "+col));
+      b.appendChild(el("span","n",n));
+      b.addEventListener("click", function(){ selectColumn(col); });
+      tabs.appendChild(b);
+    });
+    var colTasks=sortTasks(tasks.filter(function(t){ return t.column===currentColumn; }));
+    if(!colTasks.length) list.appendChild(el("div","empty","この列にタスクはありません"));
+    colTasks.forEach(function(t){ list.appendChild(renderCard(t)); });
+  }
+
+  function renderCard(t){
+    var card=el("div","kcard priority-"+(t.priority||"medium"));
+    if(isOverdue(t)) card.classList.add("overdue");
+    card.appendChild(el("div","kcard-title",t.title));
+    var meta=el("div","kcard-meta");
+    if(t.due) meta.appendChild(el("span","kbadge due"+(isOverdue(t)?" overdue":(isSoon(t)?" soon":"")),"期限 "+fmtShortDate(t.due)));
+    (t.tags||[]).slice(0,3).forEach(function(tag){ meta.appendChild(el("span","kbadge tag-"+tagColor(tag),tag)); });
+    if(t.tags && t.tags.length>3) meta.appendChild(el("span","kbadge","+"+(t.tags.length-3)));
+    if(t.workload && t.workload!=="Normal") meta.appendChild(el("span","kbadge workload",(t.workload==="Extreme"?"⚡":"🔥")+t.workload));
+    card.appendChild(meta);
+    if(t.steps && t.steps.length){
+      var done=t.steps.filter(function(s){return s.done;}).length;
+      var prog=el("div","kprog");
+      var bar=el("div","kprog-bar"); bar.style.width=Math.round(done/t.steps.length*100)+"%";
+      prog.appendChild(bar); card.appendChild(prog);
+      card.appendChild(el("div","kprog-label",done+"/"+t.steps.length+" 完了"));
+    }
+    card.addEventListener("click", function(){ openTaskSheet(t); });
+    return card;
+  }
+
+  var PRIORITY_LABEL={high:"高",medium:"中",low:"低"};
+  function openTaskSheet(t){
+    var body=document.getElementById("taskSheetBody");
+    clearChildren(body);
+    body.appendChild(el("div","sheet-grip"));
+    body.appendChild(el("h3",null,t.title));
+    var meta=el("div","kcard-meta");
+    (t.tags||[]).forEach(function(tag){ meta.appendChild(el("span","kbadge tag-"+tagColor(tag),tag)); });
+    body.appendChild(meta);
+    var kv=el("dl","kv");
+    function add(k,v){ if(!v) return; kv.appendChild(el("dt",null,k)); kv.appendChild(el("dd",null,v)); }
+    add("列", t.column);
+    add("優先度", PRIORITY_LABEL[t.priority]||t.priority);
+    add("負荷", t.workload);
+    add("開始", t.start);
+    add("期限", t.due ? t.due+(isOverdue(t)?"（期限切れ）":"") : "");
+    body.appendChild(kv);
+    if(t.steps && t.steps.length){
+      var ul=el("ul","steps");
+      t.steps.forEach(function(s){
+        var li=el("li",s.done?"done":"");
+        li.appendChild(el("span",null,s.done?"☑":"☐"));
+        li.appendChild(el("span",null,s.text));
+        ul.appendChild(li);
+      });
+      body.appendChild(ul);
+    }
+    if(t.description) body.appendChild(el("div","desc",t.description));
+    var act=el("div","sheet-actions");
+    var close=el("button","hbtn","閉じる");
+    close.addEventListener("click", function(){ closeOverlay("taskSheet"); });
+    act.appendChild(close); body.appendChild(act);
+    body.scrollTop=0;
+    openOverlay("taskSheet");
+  }
+
+  /* =====================================================================
+     SHELL: tabs / overlays / header buttons
+  ===================================================================== */
+  var currentView=lsGet(LS_PREFIX+"view")||"viewCal";
+  function showView(id){
+    if(!document.getElementById(id)) id="viewCal";
+    currentView=id;
+    lsSet(LS_PREFIX+"view", id);
+    document.documentElement.dataset.view=id==="viewTask" ? "task" : "cal";
+    document.querySelectorAll(".view").forEach(function(v){ v.classList.toggle("active", v.id===id); });
+    document.querySelectorAll(".tab").forEach(function(t){ t.classList.toggle("active", t.dataset.view===id); });
+    if(id==="viewCal") renderCalendar(); // cell height depends on the view being visible
+  }
+  document.querySelectorAll(".tab").forEach(function(t){
+    t.addEventListener("click", function(){ showView(t.dataset.view); });
+  });
+
+  // Android の「戻る」でシートを閉じられるように、開くときに履歴を1つ積む
+  function openOverlay(id){
+    var o=document.getElementById(id);
+    if(o.classList.contains("open")) return;
+    o.classList.add("open");
+    try{ history.pushState({overlay:id}, ""); }catch(e){}
+  }
+  function closeOverlay(id){
+    var o=document.getElementById(id);
+    if(!o.classList.contains("open")) return;
+    if(history.state && history.state.overlay===id) history.back(); // popstate で閉じる
+    else o.classList.remove("open");
+  }
+  window.addEventListener("popstate", function(){
+    document.querySelectorAll(".overlay.open").forEach(function(o){ o.classList.remove("open"); });
+  });
+  document.querySelectorAll(".overlay").forEach(function(o){
+    o.addEventListener("click", function(e){ if(e.target===o) closeOverlay(o.id); });
+  });
+
+  document.getElementById("loadBtn").addEventListener("click", function(){ renderLoadRows(); openOverlay("loadSheet"); });
+  document.getElementById("loadClose").addEventListener("click", function(){ closeOverlay("loadSheet"); });
+  document.getElementById("loadPick").addEventListener("click", function(){ document.getElementById("fileInput").click(); });
+  document.getElementById("fileInput").addEventListener("change", function(e){
+    var files=e.target.files;
+    handleFiles(files).then(function(){ e.target.value=""; });
+  });
+
+  document.getElementById("calPrev").addEventListener("click", function(){ shiftMonth(-1); });
+  document.getElementById("calNext").addEventListener("click", function(){ shiftMonth(1); });
+  document.getElementById("calToday").addEventListener("click", function(){ selectDay(todayStr()); });
+
+  /* =====================================================================
+     RENDER + CLOCK
+  ===================================================================== */
+  function renderAll(){
+    if(currentView==="viewCal") renderCalendar(); else renderDayPanel();
+    renderTasks();
+  }
+
+  var lastDay=todayStr();
+  function tick(){
+    var t=todayStr();
+    if(t!==lastDay){
+      // Date rolled over: follow "today" if the user was looking at it.
+      if(selectedDayStr===lastDay){ selectedDayStr=t; var d=new Date(); calState={year:d.getFullYear(), month:d.getMonth()}; }
+      lastDay=t; renderAll();
+      return;
+    }
+    updateTodayListRowStates();
+  }
+  setInterval(tick, 30000); // PC版と同じ30秒ごと
+  document.addEventListener("visibilitychange", function(){ if(document.visibilityState==="visible") tick(); });
+
+  var resizeTimer=null;
+  window.addEventListener("resize", function(){
+    clearTimeout(resizeTimer);
+    resizeTimer=setTimeout(function(){ if(currentView==="viewCal") renderCalendar(); }, 150);
+  });
+
+  // https で公開したときだけ: インストールできるように sw.js を登録する。ファイルを直接開いたときは何もしない
+  if("serviceWorker" in navigator && location.protocol==="https:"){
+    navigator.serviceWorker.register("sw.js").catch(function(){});
+  }
+
+  renderDowRow();
+  applyStore();
+  showView(currentView);
+  renderAll();
+  if(!Object.keys(store).length) setTimeout(function(){ renderLoadRows(); openOverlay("loadSheet"); }, 300);
+})();
+</script>
+</body>
+</html>
